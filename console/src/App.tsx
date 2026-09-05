@@ -482,6 +482,12 @@ function FactCard({ fact, selected, onClick }: { fact: Fact; selected: boolean; 
       <div className="mt-2 flex items-center gap-2 ml-10">
         <span className="text-[10px] text-slate-600">{fact.sources.length} source{fact.sources.length !== 1 ? "s" : ""} · {fact.as_of}</span>
         <span className="text-[10px] text-amber-700">click to inspect →</span>
+        <a href={`obsidian://open?vault=vault&file=Verified%2F${fact.fact_id}`}
+          onClick={(e) => e.stopPropagation()}
+          title="Open in Obsidian"
+          className="text-[10px] px-1.5 py-0.5 rounded border border-violet-800 text-violet-400 hover:bg-violet-900/30 transition-colors ml-auto">
+          ⟡ obsidian
+        </a>
       </div>
     </button>
   );
@@ -494,7 +500,14 @@ function FactDrawer({ fact, envelope, onClose }: { fact: Fact; envelope: Envelop
     <aside className="w-96 flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
         <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">{KIND_LABELS[fact.kind] ?? fact.kind}</span>
-        <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors text-lg leading-none">×</button>
+        <div className="flex items-center gap-2">
+          <a href={`obsidian://open?vault=vault&file=Verified%2F${fact.fact_id}`}
+            title="Open in Obsidian"
+            className="text-[10px] px-1.5 py-0.5 rounded border border-violet-800 text-violet-400 hover:bg-violet-900/30 transition-colors">
+            ⟡ obsidian
+          </a>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors text-lg leading-none">×</button>
+        </div>
       </div>
       <div className="flex-1 overflow-auto p-4 space-y-5">
         <div className="space-y-1">

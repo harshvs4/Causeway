@@ -21,6 +21,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from engine.loader import BUILD_DIR, REPO_ROOT, load
+from engine.scenario import compute as compute_scenarios, SCENARIO_LABELS
 
 VAULT_DIR = REPO_ROOT / "vault"
 TEMPLATE_DIR = REPO_ROOT / "templates"
@@ -236,6 +237,22 @@ def build_vault() -> Path:
     (VAULT_DIR / "Scenario" / "About Scenario.md").write_text(
         env.get_template("scenario_readme.md.j2").render(as_of=as_of)
     )
+
+    # --- scenario notes ---------------------------------------------------
+    scenario_template = env.get_template("scenario_client.md.j2")
+    for scenario_name in ("hormuz_escalate", "hormuz_reopen"):
+        results = compute_scenarios(dataset, scenario_name)  # type: ignore[arg-type]
+        folder = VAULT_DIR / "Scenario" / scenario_name
+        folder.mkdir(parents=True, exist_ok=True)
+        for summary in results:
+            if summary.client_id not in envelope["clients"]:
+                continue
+            rendered = scenario_template.render(
+                summary=summary.as_dict(),
+                as_of=as_of,
+            )
+            note_name = f"{summary.client_name} — {SCENARIO_LABELS[scenario_name][:30]}.md"
+            (folder / note_name).write_text(rendered)
 
     notes = sum(1 for _ in VAULT_DIR.rglob("*.md"))
     print(

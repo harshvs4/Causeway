@@ -1,0 +1,66 @@
+---
+client_id: {{ summary.client_id }}
+scenario: {{ summary.scenario }}
+confidence: scenario
+tags: [anchorline/scenario, anchorline/client/{{ summary.client_id }}]
+generated: true
+---
+
+> [!warning] Scenario — forward-looking hypothesis
+> This note describes conditions that have **not occurred** as of {{ as_of }}.
+> Nothing here is a statement of fact. Do not cite it as one.
+
+# {{ summary.scenario_label }}
+### {{ summary.client_name }}
+
+Client: [[{{ summary.client_name }}]]
+
+## Portfolio impact
+
+| | Value |
+|---|---|
+| Current portfolio | ${{ '{:,.0f}'.format(summary.current_portfolio_usd) }} |
+| Shocked portfolio | ${{ '{:,.0f}'.format(summary.shocked_portfolio_usd) }} |
+| **Total impact** | **{{ '{:+,.0f}'.format(summary.total_impact_usd) }} USD** |
+| **Impact %** | **{{ '{:+.1f}'.format(summary.total_impact_pct) }}%** |
+
+## Top gainers
+
+{% if summary.top_gainers %}
+| Instrument | Shock | Impact |
+|---|---|---|
+{% for g in summary.top_gainers %}
+| {{ g.instrument_name }} | {{ '{:+.0f}'.format(g.shock_pct) }}% | ${{ '{:+,.0f}'.format(g.impact_usd) }} |
+{% endfor %}
+{% else %}
+No material gainers under this scenario.
+{% endif %}
+
+## Top losers
+
+{% if summary.top_losers %}
+| Instrument | Shock | Impact |
+|---|---|---|
+{% for l in summary.top_losers %}
+| {{ l.instrument_name }} | {{ '{:+.0f}'.format(l.shock_pct) }}% | ${{ '{:+,.0f}'.format(l.impact_usd) }} |
+{% endfor %}
+{% else %}
+No material losers under this scenario.
+{% endif %}
+
+{% if summary.collateral_flags %}
+## Collateral warnings
+
+{% for cf in summary.collateral_flags %}
+- **{{ cf.facility_id }}**: LTV {{ '%.1f' | format(cf.current_ltv) }}% → {{ '%.1f' | format(cf.shocked_ltv) }}%{% if cf.breach %} 🔴 **BREACH**{% else %} 🟡 Warning{% endif %}
+
+{% endfor %}
+{% endif %}
+
+## All holding impacts
+
+| Instrument | Asset class | Sector | Shock | Impact |
+|---|---|---|---|---|
+{% for impact in summary.impacts %}
+| {{ impact.instrument_name }} | {{ impact.asset_class }} | {{ impact.sector }} | {{ '{:+.0f}'.format(impact.shock_pct) }}% | ${{ '{:+,.0f}'.format(impact.impact_usd) }} |
+{% endfor %}
