@@ -34,6 +34,15 @@ _STOPWORDS = {
     "entrepreneur", "founder", "co", "holding", "holdings", "unlisted",
     "second", "generation", "wealth", "sale", "shares", "share", "pte", "ltd",
     "inc", "corp", "tbk", "fund", "note", "ref", "index", "plc",
+    # Market-segment and fund-mechanics descriptors. These name how an
+    # instrument is packaged, never what industry it is in, so a stem match
+    # against them is always coincidence. "developed" is the specific offender:
+    # it shares six characters with "development", so a fortune made in
+    # property development would otherwise match a Global Developed Equity
+    # Index Fund. Raising the prefix length does not help - the two words are
+    # genuinely morphologically related and mean different things here.
+    "developed", "developing", "emerging", "global", "international",
+    "diversified", "composite", "opportunity", "opportunities",
 }
 _TOKEN = re.compile(r"[a-z]{3,}")
 

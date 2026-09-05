@@ -57,6 +57,10 @@ class SourceNotFound(LookupError):
     """A Source points at a row that does not exist. Always a bug in an analyzer."""
 
 
+class QuoteNotInSource(ValueError):
+    """A declared quote appears in no row the fact cites."""
+
+
 def source_key(file: str, row_ref: str) -> str:
     return f"{file}::{row_ref}"
 
@@ -101,3 +105,47 @@ def resolve(dataset: Dataset, file: str, row_ref: str) -> dict[str, Any]:
         raise SourceNotFound(f"{file}: {len(matched)} rows match {row_ref!r}, expected 1")
 
     return {column: _jsonable(value) for column, value in matched.iloc[0].items()}
+
+
+def verify_quotes(fact, rows: dict[str, dict[str, Any]]) -> dict[str, tuple[str, str]]:
+    """Check every declared quote appears verbatim in data the fact cites.
+
+    `Fact` can only check itself: that a declared quote actually occurs in its
+    own rendered text. That leaves the single hole in an otherwise mechanical
+    guardrail, because a quote exempts its own numerals from the claim check -
+    so an invented quote would launder invented numbers straight past it.
+
+    This closes the hole from outside, by matching the quote against the real
+    field values of the rows the fact points at. A quote that matches nothing
+    is a hard error, not a warning: the whole argument for the guardrail is
+    that it cannot be talked around.
+
+    Returns {quote: (file, field)} so the match is auditable rather than merely
+    asserted.
+    """
+    resolved: dict[str, tuple[str, str]] = {}
+    for quote in fact.quotes:
+        needle = str(quote).strip()
+        if not needle:
+            raise QuoteNotInSource(f"{fact.fact_id}: empty quote declared")
+        found: tuple[str, str] | None = None
+        for source in fact.sources:
+            row = rows.get(source_key(source.file, source.row_ref))
+            if row is None:
+                continue
+            for field, value in row.items():
+                if value is not None and needle in str(value):
+                    found = (source.file, field)
+                    break
+            if found:
+                break
+        if found is None:
+            cited = ", ".join(
+                source_key(s.file, s.row_ref) for s in fact.sources
+            )
+            raise QuoteNotInSource(
+                f"{fact.fact_id}: declared quote {needle!r} appears in none of the "
+                f"cited rows [{cited}], so it exempts numerals it has no right to"
+            )
+        resolved[quote] = found
+    return resolved

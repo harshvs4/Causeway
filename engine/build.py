@@ -21,7 +21,7 @@ from engine.analyzers import (
 )
 from engine.loader import BUILD_DIR, LATEST_SNAPSHOT, Dataset, load
 from engine.models import Fact
-from engine.sources import resolve, source_key
+from engine.sources import resolve, source_key, verify_quotes
 
 SCHEMA_VERSION = 1
 
@@ -84,6 +84,14 @@ def build() -> dict:
 
     rows = source_rows(dataset, facts)
 
+    # Quotes exempt their numerals from the claim check, so each one is matched
+    # against the real field values of the rows its fact cites. Internal
+    # consistency is not enough: an unchecked quote is a way to launder an
+    # invented number past the guardrail.
+    quoted = 0
+    for fact in facts:
+        quoted += len(verify_quotes(fact, rows))
+
     # The whole-book ranking is not a fact - it is an ordering over clients,
     # most of whom we have deliberately not gone deep on. It rides in the
     # envelope so the console can render the Monday view without re-deriving it.
@@ -115,7 +123,7 @@ def build() -> dict:
     out.write_text(json.dumps(envelope, indent=2) + "\n")
     print(
         f"wrote {out.name}: {len(payload)} facts, {len(rows)} source rows, "
-        f"{len(ranking)} clients ranked"
+        f"{len(ranking)} clients ranked, {quoted} quotes verified against source"
     )
     return envelope
 
