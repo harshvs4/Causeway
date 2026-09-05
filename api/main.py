@@ -1,18 +1,14 @@
 """Anchorline FastAPI backend.
 
-Three endpoints the console and Dograh voice layer need:
+Endpoints:
 
-  GET  /triage
-       Sorted call queue — all 20 clients ranked by severity score.
-
-  GET  /client/{client_id}
-       Full client brief: facts, signals for their holdings, rm_notes,
-       and pre-built graph nodes/edges for React Flow.
-
-  POST /voice-query
-       Grounded answer for a natural-language question about a client.
-       Uses BM25-style keyword search over fact text — no LLM generation.
-       Safe to call from Dograh: answer is always a templated sentence.
+  GET  /triage                 — ranked call queue, all 20 clients
+  GET  /client/{id}            — full brief: facts, signals, rm_notes, graph
+  POST /voice-query            — grounded BM25 answer (no LLM), safe for Dograh
+  GET  /attribution/{id}       — event×holding delta rows for one client
+  WS   /assist/{id}            — live in-call cue cards via WebSocket
+  GET  /signals/{instrument_id}— price momentum signals
+  GET  /health
 
 Run:
   uvicorn api.main:app --reload --port 8000
@@ -24,11 +20,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from engine import loader, signals as signals_mod
+from engine import loader, signals as signals_mod, attribution as attribution_mod, scenario as scenario_mod
 
 # ── startup: load everything once ────────────────────────────────────────────
 
@@ -58,10 +54,11 @@ def _load_signals() -> dict[str, Any]:
 # Load at import time (uvicorn worker start). Small enough to be instant.
 _envelope: dict[str, Any] = _load_envelope()
 _signals: dict[str, Any] = _load_signals()
+_ds = loader.load()
+_attribution: list[dict] = [r.as_dict() for r in attribution_mod.compute(_ds)]
 _rm_notes_by_client: dict[str, list[dict]] = {}
 
-# Index rm_notes per client
-_ds = loader.load()
+# Index rm_notes per client — _ds already loaded above
 for _, row in _ds.rm_notes.iterrows():
     cid = str(row.get("client_id", ""))
     if not cid:
@@ -266,6 +263,78 @@ def voice_query(req: VoiceQueryRequest) -> dict:
     }
 
 
+@app.get("/attribution/{client_id}")
+def get_attribution(client_id: str) -> list[dict]:
+    """Event×holding attribution rows for one client, sorted by abs delta."""
+    rows = [r for r in _attribution if r["client_id"] == client_id]
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No attribution for {client_id}")
+    return sorted(rows, key=lambda r: abs(r["value_delta_pct"]), reverse=True)
+
+
+@app.websocket("/assist/{client_id}")
+async def assist_ws(websocket: WebSocket, client_id: str) -> None:
+    """Live in-call cue cards via WebSocket.
+
+    The RM's transcript is sent as text frames. The server runs BM25 over
+    fact text and returns the top matching fact as a JSON cue card.
+    Only the RM sees this — the client never hears it.
+
+    Message format in:  {"transcript": "the client just said..."}
+    Message format out: {"cue": "...", "fact_id": "...", "severity": 90,
+                         "kind": "tension", "confidence": 0.8}
+    """
+    triage = _envelope["triage"]["ranking"]
+    triage_row = next((r for r in triage if r["client_id"] == client_id), None)
+    if not triage_row:
+        await websocket.close(code=1008, reason=f"Client {client_id} not found")
+        return
+
+    await websocket.accept()
+    facts = _facts_for(client_id)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            transcript = str(data.get("transcript", ""))
+            if not transcript.strip():
+                continue
+
+            matched = _bm25_search(facts, transcript, top_k=1)
+            if not matched:
+                await websocket.send_json({"cue": None})
+                continue
+
+            top = matched[0]
+            # Also check attribution for relevant events
+            attr_rows = [r for r in _attribution if r["client_id"] == client_id]
+            relevant_event = None
+            for ar in attr_rows:
+                desc = str(ar.get("matched_event_description") or "").lower()
+                if any(t in desc for t in transcript.lower().split()):
+                    relevant_event = ar
+                    break
+
+            cue = top["headline"]
+            if relevant_event and relevant_event.get("matched_event_description"):
+                cue += (
+                    f" Context: {relevant_event['matched_event_description'][:120]}"
+                    f" ({relevant_event['snapshot_from']}→{relevant_event['snapshot_to']},"
+                    f" {relevant_event['value_delta_pct']:+.1f}%)"
+                )
+
+            await websocket.send_json({
+                "cue": cue,
+                "detail": top["detail"],
+                "fact_id": top["fact_id"],
+                "severity": top["severity"],
+                "kind": top["kind"],
+                "confidence": top["confidence"],
+            })
+    except WebSocketDisconnect:
+        pass
+
+
 @app.get("/signals/{instrument_id}")
 def get_signals(instrument_id: str) -> dict:
     """Price momentum signals for a single instrument (from instruments.csv)."""
@@ -275,6 +344,33 @@ def get_signals(instrument_id: str) -> dict:
     return sig
 
 
+@app.get("/scenario/{scenario_name}")
+def get_scenario(scenario_name: str) -> list[dict]:
+    """Shock propagation for all clients under a named scenario.
+
+    Valid names: hormuz_escalate | hormuz_reopen
+    Sorted worst-impact first.
+    """
+    valid = ("hormuz_escalate", "hormuz_reopen")
+    if scenario_name not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario. Valid: {valid}")
+    results = scenario_mod.compute(_ds, scenario_name)  # type: ignore[arg-type]
+    return [r.as_dict() for r in results]
+
+
+@app.get("/scenario/{scenario_name}/client/{client_id}")
+def get_scenario_client(scenario_name: str, client_id: str) -> dict:
+    """Scenario impact for a single client."""
+    valid = ("hormuz_escalate", "hormuz_reopen")
+    if scenario_name not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario. Valid: {valid}")
+    results = scenario_mod.compute(_ds, scenario_name)  # type: ignore[arg-type]
+    row = next((r for r in results if r.client_id == client_id), None)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
+    return row.as_dict()
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -282,5 +378,7 @@ def health() -> dict:
         "facts": _envelope["fact_count"],
         "clients": len(_envelope["clients"]),
         "signals": len(_signals),
+        "attribution_rows": len(_attribution),
+        "scenarios": ["hormuz_escalate", "hormuz_reopen"],
         "as_of": _envelope["as_of"],
     }
