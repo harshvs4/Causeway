@@ -30,9 +30,11 @@ from engine.loader import BUILD_DIR, load
 HOST = os.environ.get("ANCHORLINE_MCP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("ANCHORLINE_MCP_PORT", "8848"))
 
-# Phrases in an RM note that record the client pushing back. Deterministic and
-# listed in the response, so the agent can see why a note was flagged rather
-# than trusting a judgement it cannot inspect.
+# Phrases that, when present, suggest a note records the client pushing back.
+# This is a keyword hint and nothing more: it can only ever under-fire, because
+# a note can record resistance in words that are not on this list. A false value
+# means "no listed phrase appeared", never "this client did not push back".
+# The full note text is returned either way and is the authoritative record.
 RESISTANCE_MARKERS = (
     "did not want", "does not want", "will not", "won't", "would not",
     "refused", "declined", "reluctant", "resisted", "pushed back",
@@ -254,9 +256,10 @@ def get_fact(fact_id: str) -> dict[str, Any]:
 @mcp.tool(
     description=(
         "What this client has actually said, verbatim, from the relationship "
-        "manager's notes - plus their recorded objectives. Notes where the client "
-        "pushed back are flagged, with the exact phrase that flagged them. Use "
-        "these to stay in character: argue the positions this client has really "
+        "manager's notes, plus their recorded objectives. Read every note in "
+        "full: resistance_marker_detected only means a known phrase was spotted, "
+        "so a note without one may still record the client pushing back. Use "
+        "these to stay in character - argue the positions this client has really "
         "taken, not positions a client like them might take."
     )
 )
@@ -282,7 +285,7 @@ def get_documented_objections(client_id: str) -> dict[str, Any]:
                 "date": note["note_date"].strftime("%Y-%m-%d"),
                 "channel": str(note["channel"]),
                 "note": text,
-                "records_resistance": bool(matched),
+                "resistance_marker_detected": bool(matched),
                 "resistance_markers": matched,
             }
         )
@@ -295,8 +298,13 @@ def get_documented_objections(client_id: str) -> dict[str, Any]:
         "source_of_wealth": str(row["source_of_wealth"]),
         "life_stage": str(row["life_stage"]),
         "notes": documented,
-        "notes_recording_resistance": sum(
-            1 for n in documented if n["records_resistance"]
+        "notes_with_resistance_marker": sum(
+            1 for n in documented if n["resistance_marker_detected"]
+        ),
+        "marker_caveat": (
+            "resistance_marker_detected is a keyword hint, not a classification. "
+            "It can only under-fire. Read every note in full; a note with no "
+            "marker may still record the client pushing back."
         ),
     }
 

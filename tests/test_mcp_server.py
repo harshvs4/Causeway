@@ -71,13 +71,13 @@ def test_objections_flag_the_refusal_to_sell_before_the_secondary():
     """N-003 is the objection the whole rehearsal turns on."""
     result = get_documented_objections("CL-0002")
     notes = {n["note_id"]: n for n in result["notes"]}
-    assert notes["N-003"]["records_resistance"]
+    assert notes["N-003"]["resistance_marker_detected"]
     assert "avoid selling" in " ".join(notes["N-003"]["resistance_markers"])
 
 
 def test_objections_flag_the_call_where_he_was_warned_and_proceeded():
     notes = {n["note_id"]: n for n in get_documented_objections("CL-0002")["notes"]}
-    assert notes["N-004"]["records_resistance"]
+    assert notes["N-004"]["resistance_marker_detected"]
     assert "acknowledged the point but proceeded" in notes["N-004"]["resistance_markers"]
 
 
@@ -92,7 +92,7 @@ def test_objections_are_verbatim_not_summarised():
 
 def test_resistance_markers_are_shown_so_the_flag_can_be_argued_with():
     for note in get_documented_objections("CL-0002")["notes"]:
-        if note["records_resistance"]:
+        if note["resistance_marker_detected"]:
             assert note["resistance_markers"]
             assert all(m in note["note"].lower() for m in note["resistance_markers"])
 
@@ -100,7 +100,7 @@ def test_resistance_markers_are_shown_so_the_flag_can_be_argued_with():
 def test_a_client_with_no_recorded_pushback_is_not_given_any():
     result = get_documented_objections("CL-0001")
     for note in result["notes"]:
-        if not note["records_resistance"]:
+        if not note["resistance_marker_detected"]:
             assert note["resistance_markers"] == []
 
 
