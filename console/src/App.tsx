@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Envelope, Fact, Source } from "./types";
 import { sourceKey } from "./types";
+import Assist from "./Assist";
 
 /**
  * Phase 1 console shell. Deliberately unstyled - styling is the designated cut
@@ -11,6 +12,7 @@ export default function App() {
   const [data, setData] = useState<Envelope | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Fact | null>(null);
+  const [view, setView] = useState<"facts" | "assist">("facts");
 
   useEffect(() => {
     fetch("/facts.json")
@@ -36,8 +38,18 @@ export default function App() {
       <p>
         {data.fact_count} facts · as of {data.as_of} · built {data.generated_at}
       </p>
+      <p>
+        <button onClick={() => setView("facts")} disabled={view === "facts"}>
+          Facts
+        </button>{" "}
+        <button onClick={() => setView("assist")} disabled={view === "assist"}>
+          Live assist
+        </button>
+      </p>
 
-      {Object.entries(byKind).map(([kind, facts]) => (
+      {view === "assist" && <Assist clientId="CL-0002" />}
+
+      {view === "facts" && Object.entries(byKind).map(([kind, facts]) => (
         <section key={kind}>
           <h2>{kind}</h2>
           <ul>
@@ -56,7 +68,7 @@ export default function App() {
         </section>
       ))}
 
-      {selected && (
+      {view === "facts" && selected && (
         <FactDrawer fact={selected} envelope={data} onClose={() => setSelected(null)} />
       )}
     </main>

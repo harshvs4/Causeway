@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault console console-data mcp serve test clean all
+.PHONY: setup build vault console console-data mcp assist serve test clean all
 
 setup:
 	uv venv --python 3.12
@@ -23,8 +23,10 @@ console-data: build
 console: console-data
 	cd console && npm run dev
 
-serve:
-	@echo "serve: not implemented until Phase 5"
+assist:
+	$(PY) -m assist.app
+
+serve: assist
 
 test:
 	$(PY) -m pytest -q

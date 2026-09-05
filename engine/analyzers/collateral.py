@@ -131,7 +131,7 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
                         f"Recomputed as drawn / lending value, not read from the "
                         f"reported LTV column. At that date {worst.drawn:,.0f} was "
                         f"drawn against {worst.lending_value:,.0f} of lending value "
-                        f"on {collateral}."
+                        f"in the collateral portfolio {collateral}."
                     ),
                     numbers={
                         "ltv_pct": worst.ltv,
@@ -261,7 +261,8 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
                 ),
                 detail=(
                     f"Headroom of {headroom:,.0f} in lending value at "
-                    f"{latest.snapshot}, secured on {collateral}."
+                    f"{latest.snapshot}, secured on collateral portfolio "
+                    f"{collateral}."
                 ),
                 numbers={
                     "ltv_pct": latest.ltv,

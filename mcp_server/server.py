@@ -23,9 +23,9 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
-from rank_bm25 import BM25Okapi
 
 from engine.loader import BUILD_DIR, load
+from engine.retrieval import FactIndex
 
 HOST = os.environ.get("ANCHORLINE_MCP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("ANCHORLINE_MCP_PORT", "8848"))
@@ -45,15 +45,6 @@ RESISTANCE_MARKERS = (
     "views the", "wants to hold",
 )
 
-# Stripped before relevance scoring. On documents this short, common words
-# dominate BM25 and a query about collateral comes back with whatever fact
-# happens to contain the most filler.
-_SEARCH_STOPWORDS = frozenset(
-    """a an and are as at be been but by can did do does for from had has have
-    he her his how i if in into is it its me my no not of on or our out she so
-    that the their them then there these they this to under up was we were what
-    when where which who why will with would you your""".split()
-)
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -94,8 +85,9 @@ def _facts_for(client_id: str) -> list[dict]:
     return [f for f in _envelope()["facts"] if f["client_id"] == client_id]
 
 
-def _tokens(text: str) -> list[str]:
-    return [t for t in _TOKEN.findall(text.lower()) if t not in _SEARCH_STOPWORDS]
+@lru_cache(maxsize=8)
+def _index(client_id: str) -> FactIndex:
+    return FactIndex(_facts_for(client_id), _envelope().get("source_rows", {}))
 
 
 # --------------------------------------------------------------------------
@@ -206,25 +198,19 @@ def search_facts(client_id: str, query: str, limit: int = 5) -> dict[str, Any]:
     if not facts:
         return {"client_id": client_id, "query": query, "results": []}
 
-    corpus = [_tokens(f"{f['headline']} {f['detail']} {f['kind']}") for f in facts]
-    bm25 = BM25Okapi(corpus)
-    scores = bm25.get_scores(_tokens(query))
-    ordered = sorted(zip(facts, scores), key=lambda pair: -pair[1])
-
     return {
         "client_id": client_id,
         "query": query,
         "results": [
             {
-                "fact_id": fact["fact_id"],
-                "kind": fact["kind"],
-                "severity": fact["severity"],
-                "relevance": round(float(score), 3),
-                "headline": fact["headline"],
-                "detail": fact["detail"],
+                "fact_id": hit.fact["fact_id"],
+                "kind": hit.fact["kind"],
+                "severity": hit.fact["severity"],
+                "relevance": round(hit.score, 3),
+                "headline": hit.fact["headline"],
+                "detail": hit.fact["detail"],
             }
-            for fact, score in ordered[: max(1, limit)]
-            if score > 0
+            for hit in _index(client_id).search(query, limit)
         ],
     }
 
