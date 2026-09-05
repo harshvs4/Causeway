@@ -30,6 +30,26 @@ STOPWORDS = frozenset(
 )
 
 
+_SUFFIXES = (("ies", "y"), ("ing", ""), ("ed", ""), ("es", ""), ("s", ""), ("e", ""))
+_MIN_STEM = 3
+
+
+def stem(token: str) -> str:
+    """Fold a word to a comparable root.
+
+    Not linguistics - just enough that "breach" and "breached" are the same
+    query. Without it, asking "did he breach the facility" ranked the driver
+    fact at 3.13 and the breach fact itself at 0.61, purely because one text
+    says "breach" as a noun and the other says "breached" as a verb. Applied
+    identically to queries and documents, so any over-stemming is symmetric
+    and cannot create a match that the other side does not also make.
+    """
+    for suffix, replacement in _SUFFIXES:
+        if token.endswith(suffix) and len(token) - len(suffix) >= _MIN_STEM:
+            return token[: -len(suffix)] + replacement
+    return token
+
+
 def tokenise(text: str) -> list[str]:
     """Words worth matching on.
 
@@ -39,7 +59,7 @@ def tokenise(text: str) -> list[str]:
     came back with a concentration fact.
     """
     return [
-        token
+        stem(token)
         for token in _TOKEN.findall(text.lower())
         if len(token) > 1 and token not in STOPWORDS
     ]
@@ -100,7 +120,24 @@ class FactIndex:
             self._corpus.append(tokenise(document))
         self._bm25 = BM25Okapi(self._corpus) if self._corpus else None
 
-    def search(self, query: str, limit: int = 3, min_score: float = 0.0) -> list[Hit]:
+    def search(
+        self,
+        query: str,
+        limit: int = 3,
+        min_score: float = 0.0,
+        relative_cutoff: float = 0.0,
+    ) -> list[Hit]:
+        """Rank facts for a query.
+
+        `relative_cutoff` keeps hits scoring at least that fraction of the best
+        hit. BM25 scores are not comparable across corpora - excluding one kind
+        of fact shifted every score in this index by enough to drop a whole
+        cluster under a fixed threshold - so what matters is the gap between
+        the leaders and the rest, not any absolute constant. On "worried about
+        the collateral" the four facility facts sit within 0.03 of each other
+        and the next fact is 40% lower; a relative cutoff sees that shape, an
+        absolute one cannot.
+        """
         if not self._bm25:
             return []
         tokens = tokenise(query)
@@ -108,10 +145,13 @@ class FactIndex:
             return []
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(zip(self.facts, scores), key=lambda pair: -pair[1])
+        if not ranked or ranked[0][1] <= min_score:
+            return []
+        floor = max(min_score, ranked[0][1] * relative_cutoff)
         return [
             Hit(fact, float(score))
             for fact, score in ranked[: max(1, limit)]
-            if score > min_score
+            if score >= floor and score > 0
         ]
 
 

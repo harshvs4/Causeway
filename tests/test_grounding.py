@@ -224,3 +224,18 @@ def test_explain_and_ungrounded_agree():
     said = "72.22% utilisation, 31.20% weighting, 44,500,000 stake"
     assert ungrounded(said, sources) == \
         [c.written for c in explain(said, sources) if not c.grounded]
+
+
+def test_stemming_is_symmetric_between_query_and_document():
+    """Over-stemming is only safe if both sides are stemmed the same way."""
+    from engine.retrieval import stem, tokenise
+    assert stem("breached") == stem("breach")
+    assert stem("warned") == stem("warn")
+    assert tokenise("did he breach") == tokenise("has he breached")
+
+
+def test_stemming_does_not_collapse_unrelated_words():
+    from engine.retrieval import stem
+    assert stem("collateral") != stem("collect")
+    assert stem("trigger") != stem("trade")
+    assert stem("market") != stem("margin")

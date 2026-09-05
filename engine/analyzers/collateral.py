@@ -89,6 +89,26 @@ def _facility_source(facility_id: str, fields: tuple[str, ...]) -> Source:
     return Source(file="credit_facilities.csv", row_ref=facility_id, fields=fields)
 
 
+def _notes_in_window(dataset: Dataset, client_id: str, frm: str, to: str) -> tuple:
+    """RM notes written between two snapshots.
+
+    A breach caused by client action is only half a fact; the other half is
+    what was said at the time. N-004 records both the drawdown and the warning
+    that preceded it, and the analyzer was citing the facility row alone. Notes
+    are selected by date window, not by hand, so the citation stays derived.
+    """
+    notes = dataset.rm_notes
+    notes = notes[
+        (notes["client_id"] == client_id)
+        & (notes["note_date"] > pd.Timestamp(frm))
+        & (notes["note_date"] <= pd.Timestamp(to))
+    ]
+    return tuple(
+        Source(file="rm_notes.json", row_ref=str(n["note_id"]), fields=("note",))
+        for _, n in notes.iterrows()
+    )
+
+
 def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fact]:
     facts: list[Fact] = []
     facilities = dataset.credit_facilities
@@ -188,7 +208,9 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
                             "drawn_change": drawn_change,
                             "lending_change": lending_change,
                         },
-                        sources=(path_source,),
+                        sources=(path_source,)
+                        + _notes_in_window(dataset, client_id,
+                                           step.frm.snapshot, step.to.snapshot),
                         as_of=step.to.snapshot,
                         confidence="derived",
                         severity=90,

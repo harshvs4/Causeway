@@ -32,14 +32,24 @@ from pydantic import BaseModel, Field
 from engine.loader import BUILD_DIR
 from engine.retrieval import FactIndex
 
-# A cue must clear this to be worth interrupting a conversation for.
-MIN_RELEVANCE = 0.25
+# A cue must clear this to be worth interrupting a conversation for. Kept low
+# and absolute only to reject noise; the real filter is RELATIVE_CUTOFF.
+MIN_RELEVANCE = 0.15
+# Keep facts scoring within this fraction of the best hit. Adapts to the
+# query instead of assuming BM25 scores mean the same thing every time.
+RELATIVE_CUTOFF = 0.6
 # How long before the same fact may surface again, in seconds. Live calls circle
 # back; a prompter that repeats itself every sentence is noise.
 COOLDOWN_SECONDS = 90.0
 # Rolling window of recent speech used for retrieval. One sentence is too little
 # context, the whole call is too much.
 WINDOW_CHARS = 400
+
+# Kinds that are never a live cue. "You are ranked 1 of 20 this week" is useful
+# on a Monday morning and useless mid-sentence, and its boilerplate detail is
+# identical across clients, so it matches loosely on words like "trust" and
+# "score" and crowds out facts that answer the actual question.
+NON_CONVERSATIONAL_KINDS = frozenset({"triage"})
 
 
 class TranscriptChunk(BaseModel):
@@ -94,6 +104,8 @@ def load_facts() -> None:
     _envelope = json.loads(path.read_text())
     grouped: dict[str, list[dict]] = defaultdict(list)
     for fact in _envelope["facts"]:
+        if fact["kind"] in NON_CONVERSATIONAL_KINDS:
+            continue
         grouped[fact["client_id"]].append(fact)
     rows = _envelope.get("source_rows", {})
     _indexes = {cid: FactIndex(items, rows) for cid, items in grouped.items()}
@@ -157,7 +169,9 @@ async def ingest(chunk: TranscriptChunk) -> list[dict[str, Any]]:
 
     now = time.monotonic()
     cues: list[dict[str, Any]] = []
-    for hit in index.search(session.recent(), limit=3, min_score=MIN_RELEVANCE):
+    for hit in index.search(session.recent(), limit=3,
+                            min_score=MIN_RELEVANCE,
+                            relative_cutoff=RELATIVE_CUTOFF):
         if not session.may_surface(hit.fact_id, now):
             continue
         session.last_surfaced[hit.fact_id] = now
