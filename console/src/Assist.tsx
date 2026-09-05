@@ -132,16 +132,29 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
   }, [listening, send]);
 
   return (
-    <section>
-      <h2>Live assist — {clientId}</h2>
-      <p>
-        <button onClick={toggleMic}>{listening ? "Stop listening" : "Start listening"}</button>{" "}
-        <small>
-          socket {connected ? "connected" : "disconnected"} · {cues.length} cue
+    <>
+      <div className="page-head">
+        <div className="eyebrow">Live assist · {clientId}</div>
+        <h1>Listening</h1>
+        <p className="lede">
+          Grounded facts, surfaced as the conversation reaches them. Nothing here speaks —
+          there is no audio output in this service at all, which is what makes the rule
+          that the client only ever hears their RM structural rather than promised.
+        </p>
+      </div>
+
+      <div className="mic">
+        <button className={listening ? "" : "primary"} onClick={toggleMic}>
+          {listening ? "Stop listening" : "Start listening"}
+        </button>
+        <span className={`dot ${listening ? "live" : ""}`} />
+        <span className="hint">
+          {connected ? "connected" : "not connected"} · {cues.length} cue
           {cues.length === 1 ? "" : "s"}
-        </small>
-      </p>
-      {error && <p role="alert">{error}</p>}
+        </span>
+      </div>
+
+      {error && <p className="notice">{error}</p>}
 
       <form
         onSubmit={(event) => {
@@ -149,63 +162,77 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
           send(typed, "typed");
           setTyped("");
         }}
+        style={{ display: "flex", gap: "var(--s2)", marginBottom: "var(--s6)", maxWidth: "620px" }}
       >
         <input
           value={typed}
           onChange={(event) => setTyped(event.target.value)}
-          placeholder="or type what was said"
-          size={60}
-        />{" "}
+          placeholder="or type what was said — same path, for a noisy room"
+        />
         <button type="submit">Send</button>
       </form>
 
-      <h3>Cues</h3>
-      {cues.length === 0 && <p>Nothing yet. Say something about the portfolio.</p>}
-      {cues.map((cue, index) => (
-        <article key={`${cue.fact_id}-${index}`}>
-          <h4>{cue.headline}</h4>
-          <p>{cue.detail}</p>
-          <small>
-            {cue.fact_id} · {cue.kind} · {cue.confidence} · severity {cue.severity} ·
-            relevance {cue.relevance} · as of {cue.as_of}
-          </small>
-          <details>
-            <summary>Sources ({cue.sources.length})</summary>
-            {cue.sources.map((source) => (
-              <div key={`${source.file}-${source.row_ref}`}>
-                <code>
-                  {source.file} — {source.row_ref}
-                </code>
-                <table>
-                  <tbody>
-                    {Object.entries(source.row).map(([key, value]) => (
-                      <tr key={key}>
-                        <td>
-                          {source.fields.includes(key) ? <strong>{key}</strong> : key}
-                        </td>
-                        <td>{value === null ? "" : String(value)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      <div className="assist">
+        <div>
+          {cues.length === 0 && (
+            <p className="empty">
+              Nothing yet. Say something about the portfolio and the relevant facts will
+              appear here, newest first.
+            </p>
+          )}
+          {cues.map((cue, index) => (
+            <article className={`cue ${index === 0 ? "fresh" : ""}`} key={`${cue.fact_id}-${index}`}>
+              <h4>{cue.headline}</h4>
+              <p>{cue.detail}</p>
+              <div className="foot">
+                <span className={`chip ${cue.confidence === "verified" ? "chip-verified" : "chip-derived"}`}>
+                  {cue.confidence}
+                </span>
+                <span>{cue.fact_id}</span>
+                <span>·</span>
+                <span>relevance {cue.relevance}</span>
               </div>
-            ))}
-          </details>
-          <hr />
-        </article>
-      ))}
-
-      <h3>Heard</h3>
-      <ul>
-        {lines
-          .slice()
-          .reverse()
-          .map((line, index) => (
-            <li key={index}>
-              <small>[{line.source}]</small> {line.text}
-            </li>
+              <details>
+                <summary>Sources ({cue.sources.length})</summary>
+                {cue.sources.map((source) => (
+                  <div className="source-block" key={`${source.file}-${source.row_ref}`}>
+                    <div className="head">
+                      <span className="file">{source.file}</span>
+                      <span className="hint">{source.row_ref}</span>
+                    </div>
+                    <div className="kv">
+                      {Object.entries(source.row).map(([key, value]) => (
+                        <div key={key}>
+                          <span className="k">{key}</span>
+                          <span className={`v ${source.fields.includes(key) ? "cited" : ""}`}>
+                            {value === null || value === "" ? "—" : String(value)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </details>
+            </article>
           ))}
-      </ul>
-    </section>
+        </div>
+
+        <div className="heard">
+          <div className="eyebrow">Heard</div>
+          <ul>
+            {lines.length === 0 && <li className="hint">nothing yet</li>}
+            {lines
+              .slice()
+              .reverse()
+              .map((line, index) => (
+                <li key={index}>
+                  <span className="src">{line.source}</span>
+                  {line.text}
+                </li>
+              ))}
+          </ul>
+        </div>
+      </div>
+    </>
   );
 }
