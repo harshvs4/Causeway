@@ -51,6 +51,10 @@ WINDOW_CHARS = 400
 # "score" and crowds out facts that answer the actual question.
 NON_CONVERSATIONAL_KINDS = frozenset({"triage"})
 
+# How many cards to put on screen at once. More than this is not a prompter,
+# it is a reading task in the middle of a conversation.
+MAX_CUES = 3
+
 
 class TranscriptChunk(BaseModel):
     client_id: str
@@ -169,9 +173,20 @@ async def ingest(chunk: TranscriptChunk) -> list[dict[str, Any]]:
 
     now = time.monotonic()
     cues: list[dict[str, Any]] = []
-    for hit in index.search(session.recent(), limit=3,
-                            min_score=MIN_RELEVANCE,
-                            relative_cutoff=RELATIVE_CUTOFF):
+    # Rank a wider pool than we intend to show, then drop what is on cooldown,
+    # then take the top few. Filtering after truncation meant that when the top
+    # three were all recently surfaced, a relevant fact ranked fourth - one the
+    # RM had never seen - could not take their place, and the panel simply went
+    # quiet mid-conversation.
+    candidates = index.search(
+        session.recent(),
+        limit=MAX_CUES * 4,
+        min_score=MIN_RELEVANCE,
+        relative_cutoff=RELATIVE_CUTOFF,
+    )
+    for hit in candidates:
+        if len(cues) >= MAX_CUES:
+            break
         if not session.may_surface(hit.fact_id, now):
             continue
         session.last_surfaced[hit.fact_id] = now
@@ -195,6 +210,15 @@ async def health() -> dict[str, Any]:
         "facts": len(_facts_by_id),
         "as_of": _envelope.get("as_of"),
     }
+
+
+@app.post("/session/reset")
+async def reset_session(client_id: str = "CL-0002") -> dict[str, Any]:
+    """Forget the conversation so far. Cheap insurance before a demo."""
+    session = session_for(client_id)
+    session.window.clear()
+    session.last_surfaced.clear()
+    return {"reset": client_id}
 
 
 @app.post("/transcript")
@@ -250,6 +274,12 @@ async def assist(websocket: WebSocket, client_id: str = "CL-0002") -> None:
     """Cue cards out. There is no audio channel here, by design."""
     await websocket.accept()
     session = session_for(client_id)
+    if not session.sockets:
+        # First listener on this client: a new call, not a continuation. Without
+        # this, a window and cooldown map left over from earlier traffic silently
+        # suppress the first cues of the real conversation.
+        session.window.clear()
+        session.last_surfaced.clear()
     session.sockets.add(websocket)
     await websocket.send_json(
         {"type": "ready", "client_id": client_id,
