@@ -170,3 +170,57 @@ def test_retrievable_is_scoped_to_rows_actually_cited():
              for s in f["sources"]}
     assert cited, "no citations to scope to"
     assert len(values) < sum(len(r) for r in envelope["source_rows"].values())
+
+
+# ===========================================================================
+# Provenance: a pass has to be evidence, not an assertion
+# ===========================================================================
+
+def test_a_grounded_number_names_the_row_and_field_that_supports_it():
+    from engine.grounding import explain, retrievable_sources
+    claims = explain("utilisation is 72.22%", retrievable_sources(_envelope(), "CL-0002"))
+    assert len(claims) == 1
+    assert claims[0].grounded
+    assert claims[0].supported_by.origin == \
+        "credit_facilities.csv::CF-0001.utilisation_pct_current"
+    assert str(claims[0]) == \
+        "72.22 matches credit_facilities.csv::CF-0001.utilisation_pct_current"
+
+
+def test_a_computed_number_is_attributed_to_the_fact_that_produced_it():
+    from engine.grounding import explain, grounded_sources
+    claims = explain("the LTV is 75.64%", grounded_sources(_envelope()["facts"], "CL-0002"))
+    assert claims[0].grounded
+    assert claims[0].supported_by.origin.startswith("F-CL0002-COLLAT")
+    assert claims[0].supported_by.origin.endswith(".ltv_pct")
+
+
+def test_an_ungrounded_number_says_so_and_names_nothing():
+    from engine.grounding import explain, retrievable_sources
+    claims = explain("weighting is 31.20%", retrievable_sources(_envelope(), "CL-0002"))
+    assert not claims[0].grounded
+    assert claims[0].supported_by is None
+    assert str(claims[0]) == "31.20 — UNGROUNDED"
+
+
+def test_provenance_survives_a_restatement():
+    """13.2 is 13,207,200 said aloud; the citation must still be exact."""
+    from engine.grounding import explain, retrievable_sources
+    claims = explain("about 13.2 million looks liquid",
+                     retrievable_sources(_envelope(), "CL-0002"))
+    assert claims[0].grounded
+    assert "F-CL0002-LIQUIDITY" in claims[0].supported_by.origin
+
+
+def test_trailing_punctuation_is_not_part_of_the_number():
+    from engine.grounding import claimed
+    assert [w for w, _, _ in claimed("drawn is 6,500,000, and that is that")] \
+        == ["6,500,000"]
+
+
+def test_explain_and_ungrounded_agree():
+    from engine.grounding import explain, retrievable_sources, ungrounded
+    sources = retrievable_sources(_envelope(), "CL-0002")
+    said = "72.22% utilisation, 31.20% weighting, 44,500,000 stake"
+    assert ungrounded(said, sources) == \
+        [c.written for c in explain(said, sources) if not c.grounded]
