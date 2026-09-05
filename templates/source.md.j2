@@ -1,0 +1,23 @@
+---
+source_file: {{ file }}
+row_ref: "{{ row_ref }}"
+generated: true
+---
+
+# `{{ file }}` — {{ row_ref }}
+
+> [!quote] Raw data
+> This is the row itself, reproduced from `data/{{ file }}`. It is the end of the
+> traceability chain: there is nothing behind this but the dataset.
+
+| Field | Value |
+|---|---|
+{% for key, value in row.items() -%}
+| {{ '**' + key + '**' if key in cited_fields else key }} | {{ value if value is not none else '' }} |
+{% endfor %}
+
+## Cited by
+
+{% for fact_id in cited_by %}
+- [[{{ fact_id }}]]
+{% endfor %}

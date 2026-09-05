@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault serve test clean all
+.PHONY: setup build vault console console-data serve test clean all
 
 setup:
 	uv venv --python 3.12
@@ -10,8 +10,15 @@ setup:
 build:
 	$(PY) -m engine.build
 
-vault:
-	@echo "vault: not implemented until Phase 3"
+vault: build
+	$(PY) vault_build.py
+
+console-data: build
+	mkdir -p console/public
+	cp build/facts.json console/public/facts.json
+
+console: console-data
+	cd console && npm run dev
 
 serve:
 	@echo "serve: not implemented until Phase 5"

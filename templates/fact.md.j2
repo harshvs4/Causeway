@@ -1,0 +1,37 @@
+---
+fact_id: {{ fact.fact_id }}
+client_id: {{ fact.client_id }}
+kind: {{ fact.kind }}
+confidence: {{ fact.confidence }}
+severity: {{ fact.severity }}
+as_of: {{ fact.as_of }}
+generated: true
+---
+
+# {{ fact.headline }}
+
+{{ fact.detail }}
+
+{% if fact.confidence == 'scenario' %}
+> [!warning] Scenario — forward-looking
+> Hypothetical. Not a statement about what happened, and never to be shown as one.
+{% else %}
+> [!check] {{ fact.confidence | capitalize }}
+> Every figure below was computed from the cited rows. Nothing here is generated prose.
+{% endif %}
+
+Client: [[{{ client_note }}]]
+
+## Computed values
+
+| Name | Value |
+|---|---|
+{% for key, value in fact.numbers.items() %}
+| `{{ key }}` | {{ '{:,.4f}'.format(value) }} |
+{% endfor %}
+
+## Sources
+
+{% for source in fact.sources %}
+- [[{{ source_note(source.file, source.row_ref) }}]] — `{{ source.file }}` row `{{ source.row_ref }}`, fields `{{ source.fields | join('`, `') }}`
+{% endfor %}
