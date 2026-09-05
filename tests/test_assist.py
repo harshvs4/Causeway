@@ -237,3 +237,37 @@ def test_relative_cutoff_survives_a_corpus_change():
     query = "he's worried about the collateral"
     assert with_triage.search(query, relative_cutoff=0.6)
     assert without.search(query, relative_cutoff=0.6)
+
+
+# --- a conversation is a sequence, not one question -------------------------
+
+def test_each_question_in_a_conversation_gets_its_own_answer(fresh):
+    """The reported failure: the first question worked and later ones did not.
+
+    The window accumulated twelve utterances and every search ran against the
+    whole mush, so by the third question the query was three topics at once and
+    the ranking answered none of them well.
+    """
+    expected = [
+        ("he's worried about the collateral", "F-CL0002-COLLAT-CURE"),
+        ("can he actually fund the family trust", "F-CL0002-LIQUIDITY-CN-003"),
+        ("what about his helios exposure", "F-CL0002-LOOKTHRU-PF-0003"),
+        ("did he breach the facility", "F-CL0002-COLLAT-BREACH"),
+    ]
+    for phrase, wanted in expected:
+        cues = say(phrase)
+        assert cues, f"{phrase!r} surfaced nothing"
+        assert cues[0]["fact_id"] == wanted, f"{phrase!r} led with {cues[0]['fact_id']}"
+
+
+def test_the_latest_utterance_outranks_earlier_context(fresh):
+    """Ask about collateral, then about Helios. The second answer must be Helios."""
+    say("he's worried about the collateral")
+    cues = say("what about his helios exposure")
+    assert cues[0]["fact_id"] == "F-CL0002-LOOKTHRU-PF-0003"
+
+
+def test_context_still_rescues_a_fragment(fresh):
+    """A fragment on its own finds nothing, so the window is the fallback."""
+    say("I want to talk about the facility")
+    assert say("the trigger") != []

@@ -41,9 +41,13 @@ RELATIVE_CUTOFF = 0.6
 # How long before the same fact may surface again, in seconds. Live calls circle
 # back; a prompter that repeats itself every sentence is noise.
 COOLDOWN_SECONDS = 90.0
-# Rolling window of recent speech used for retrieval. One sentence is too little
-# context, the whole call is too much.
-WINDOW_CHARS = 400
+# Context window, used only as a fallback. What someone just said is the
+# question; earlier speech is there to rescue a fragment like "what about that?"
+# Searching the whole window every time makes the query a mush of every topic
+# raised so far, which is why the second and third questions in a conversation
+# returned one weak card instead of the right ones.
+WINDOW_CHARS = 220
+WINDOW_UTTERANCES = 3
 
 # Kinds that never surface live.
 #
@@ -75,7 +79,7 @@ class TranscriptChunk(BaseModel):
 @dataclass
 class Session:
     client_id: str
-    window: deque[str] = field(default_factory=lambda: deque(maxlen=12))
+    window: deque[str] = field(default_factory=lambda: deque(maxlen=WINDOW_UTTERANCES))
     last_surfaced: dict[str, float] = field(default_factory=dict)
     sockets: set[WebSocket] = field(default_factory=set)
 
@@ -186,12 +190,22 @@ async def ingest(chunk: TranscriptChunk) -> list[dict[str, Any]]:
     # three were all recently surfaced, a relevant fact ranked fourth - one the
     # RM had never seen - could not take their place, and the panel simply went
     # quiet mid-conversation.
+    # What was just said is the question. Only if that alone finds nothing do we
+    # widen to recent context - a live prompter should answer the sentence in
+    # front of it, not the average of the last minute.
     candidates = index.search(
-        session.recent(),
+        text,
         limit=MAX_CUES * 4,
         min_score=MIN_RELEVANCE,
         relative_cutoff=RELATIVE_CUTOFF,
     )
+    if not candidates:
+        candidates = index.search(
+            session.recent(),
+            limit=MAX_CUES * 4,
+            min_score=MIN_RELEVANCE,
+            relative_cutoff=RELATIVE_CUTOFF,
+        )
     for hit in candidates:
         if len(cues) >= MAX_CUES:
             break
