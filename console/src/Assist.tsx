@@ -54,12 +54,26 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
   const recogRef = useRef<any>(null);
 
   useEffect(() => {
+    // React StrictMode mounts effects twice in dev. The first socket gets
+    // closed by cleanup while still CONNECTING, which fires an error event —
+    // so without this guard the console reports the service as unreachable
+    // while the second socket is connected and working perfectly.
+    let cancelled = false;
     const socket = new WebSocket(`${ASSIST_WS}?client_id=${clientId}`);
     socketRef.current = socket;
-    socket.onopen = () => setConnected(true);
-    socket.onclose = () => setConnected(false);
-    socket.onerror = () => setError("Assist service unreachable — run `make assist`.");
+    socket.onopen = () => {
+      if (cancelled) return;
+      setConnected(true);
+      setError(null); // a successful connection clears any earlier failure
+    };
+    socket.onclose = () => {
+      if (!cancelled) setConnected(false);
+    };
+    socket.onerror = () => {
+      if (!cancelled) setError("Assist service unreachable — run `make assist`.");
+    };
     socket.onmessage = (event) => {
+      if (cancelled) return;
       const message = JSON.parse(event.data);
       if (message.type === "transcript") {
         setLines((prev) => [...prev.slice(-40), message as Line]);
@@ -68,7 +82,10 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
         setCues((prev) => [message.cue, ...prev].slice(0, 12));
       }
     };
-    return () => socket.close();
+    return () => {
+      cancelled = true;
+      socket.close();
+    };
   }, [clientId]);
 
   const send = useCallback(
