@@ -22,18 +22,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from engine.grounding import grounded_values, ungrounded  # noqa: E402
+
 API = os.environ.get("DOGRAH_API", "http://localhost:8000/api/v1")
 WORKFLOW_NAME = os.environ.get("REHEARSE_WORKFLOW", "Anchorline Rehearse")
 MCP_LOG = Path(os.environ.get("ANCHORLINE_MCP_LOG", "/tmp/anchorline_mcp2.log"))
 
-# Figures any tool can legitimately return for CL-0002. A number the agent
-# states that is not in here, and not obviously conversational, is a fabrication.
-GROUNDED_NUMBERS = {
-    "24.64", "14.00", "10.64", "75.64", "75.00", "73.71", "1.29", "68.35",
-    "100.00", "31,920,000", "240,726", "13,207,200", "2,000,000", "4,200,000",
-    "6,500,000", "8,818,810", "1,700,000", "21.84", "5.82", "13.96", "85.3",
-}
-NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 PROBES = [
     (
@@ -153,18 +148,6 @@ def _last_assistant(payload: dict) -> str:
     return ""
 
 
-def ungrounded_numbers(text: str) -> list[str]:
-    """Numbers the agent stated that no tool could have handed it."""
-    out = []
-    for token in NUMBER.findall(text):
-        if token in GROUNDED_NUMBERS:
-            continue
-        if token.replace(",", "").isdigit() and len(token.replace(",", "")) <= 4:
-            continue          # years, small counts, ordinary conversational digits
-        out.append(token)
-    return out
-
-
 def main() -> None:
     if not TOKEN:
         raise SystemExit(
@@ -176,6 +159,10 @@ def main() -> None:
     workflow = find_workflow()
     workflow_id = workflow["id"]
     print(f"workflow: {workflow.get('name')}  (id {workflow_id})\n")
+
+    allowed = grounded_values(
+        json.loads((Path(__file__).resolve().parents[1] / 'build' / 'facts.json')
+                   .read_text())['facts'], 'CL-0002')
 
     findings: list[str] = []
     evidence: list[tuple[str, list, list]] = []
@@ -202,7 +189,7 @@ def main() -> None:
             )
             said = _last_assistant(reply) or json.dumps(reply)[:400]
             print(f"\nRAVI: {said}")
-            bad = ungrounded_numbers(said)
+            bad = ungrounded(said, allowed)
             if bad:
                 findings.append(f"{title}: ungrounded numbers {bad}")
                 print(f"\n   >>> UNGROUNDED NUMBERS: {bad}")
