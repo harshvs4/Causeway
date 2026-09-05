@@ -57,6 +57,13 @@ _SEARCH_STOPWORDS = frozenset(
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
+
+def _log_call(tool: str, **kwargs: Any) -> None:
+    """Record every invocation. Without this there is no way to tell whether an
+    agent grounded an answer or merely sounded grounded."""
+    detail = " ".join(f"{k}={v!r}" for k, v in kwargs.items())
+    print(f"[TOOLCALL] {tool} {detail}", flush=True)
+
 mcp = MCPServer(
     name="anchorline",
     instructions=(
@@ -102,6 +109,7 @@ def _tokens(text: str) -> list[str]:
     )
 )
 def list_clients() -> dict[str, Any]:
+    _log_call("list_clients")
     envelope = _envelope()
     clients = _dataset().clients.set_index("client_id")
     ranking = {row["client_id"]: row for row in envelope["triage"]["ranking"]}
@@ -135,6 +143,7 @@ def list_clients() -> dict[str, Any]:
     )
 )
 def get_client_brief(client_id: str) -> dict[str, Any]:
+    _log_call("get_client_brief", client_id=client_id)
     envelope = _envelope()
     dataset = _dataset()
     clients = dataset.clients.set_index("client_id")
@@ -192,6 +201,7 @@ def get_client_brief(client_id: str) -> dict[str, Any]:
     )
 )
 def search_facts(client_id: str, query: str, limit: int = 5) -> dict[str, Any]:
+    _log_call("search_facts", client_id=client_id, query=query)
     facts = _facts_for(client_id)
     if not facts:
         return {"client_id": client_id, "query": query, "results": []}
@@ -230,6 +240,7 @@ def search_facts(client_id: str, query: str, limit: int = 5) -> dict[str, Any]:
     )
 )
 def get_fact(fact_id: str) -> dict[str, Any]:
+    _log_call("get_fact", fact_id=fact_id)
     envelope = _envelope()
     fact = next((f for f in envelope["facts"] if f["fact_id"] == fact_id), None)
     if fact is None:
@@ -264,6 +275,7 @@ def get_fact(fact_id: str) -> dict[str, Any]:
     )
 )
 def get_documented_objections(client_id: str) -> dict[str, Any]:
+    _log_call("get_documented_objections", client_id=client_id)
     dataset = _dataset()
     clients = dataset.clients.set_index("client_id")
     if client_id not in clients.index:

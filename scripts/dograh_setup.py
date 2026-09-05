@@ -20,7 +20,6 @@ import urllib.request
 from pathlib import Path
 
 API = os.environ.get("DOGRAH_API", "http://localhost:8000/api/v1")
-TOKEN = os.environ.get("DOGRAH_TOKEN", "")
 MCP_URL = os.environ.get(
     "ANCHORLINE_MCP_URL", "http://host.docker.internal:8848/mcp"
 )
@@ -28,6 +27,30 @@ PERSONA = Path(__file__).resolve().parents[1] / "mcp_server" / "personas" / "CL-
 
 TOOL_NAME = "anchorline"
 WORKFLOW_NAME = "Anchorline Rehearse — Ravi Chandrasekaran (CL-0002)"
+
+
+def _read_token() -> str:
+    """Token from the environment, or from a file outside the repo.
+
+    The file path exists because shell environment does not survive between
+    separate command invocations, and because a credential should not be pasted
+    into a chat transcript to get here. The file is read, never written or
+    echoed.
+    """
+    from pathlib import Path as _Path
+
+    env = os.environ.get("DOGRAH_TOKEN", "").strip()
+    if env:
+        return env
+    candidate = _Path(
+        os.environ.get("DOGRAH_TOKEN_FILE", "~/.dograh_token")
+    ).expanduser()
+    if candidate.exists():
+        return candidate.read_text().strip()
+    return ""
+
+
+TOKEN = _read_token()
 
 
 def call(method: str, path: str, payload: dict | None = None) -> dict:
@@ -52,7 +75,7 @@ def call(method: str, path: str, payload: dict | None = None) -> dict:
 def main() -> None:
     if not TOKEN:
         raise SystemExit(
-            "DOGRAH_TOKEN is not set.\n\n"
+            "No Dograh token found (checked $DOGRAH_TOKEN and ~/.dograh_token).\n\n"
             "  1. Open http://localhost:3010 and sign in.\n"
             "  2. In devtools, copy the bearer token the UI sends on any\n"
             "     /api/v1/ request (Network tab -> Authorization header).\n"
