@@ -97,7 +97,7 @@ Two invariants, each with a test:
 
 | Layer | Choice | Why this and not the obvious alternative |
 |---|---|---|
-| Engine | Python 3.11, pandas, pydantic, `uv` | The dataset is 1,015 holdings rows. pandas is instant; a database is pure overhead at this size. |
+| Engine | Python 3.12, pandas, pydantic, `uv` | The dataset is 1,015 holdings rows. pandas is instant; a database is pure overhead at this size. **3.12 not 3.11:** the system default is 3.14.0, where pandas wheels are not reliably published, so `uv` fetches 3.12 for the venv. |
 | Fact store | `build/facts.json` on disk | No DB, no migrations, no server for the console to depend on. Regenerating is `make build`. |
 | Vault | Jinja2 → markdown files | Obsidian reads a folder. Nothing else needed. |
 | Console | Vite + React + TS + Tailwind | Static build reading `facts.json`. Next.js buys SSR we don't need and costs config time we don't have. |
