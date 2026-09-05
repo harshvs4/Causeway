@@ -25,9 +25,79 @@ from engine.loader import BUILD_DIR, REPO_ROOT, load
 VAULT_DIR = REPO_ROOT / "vault"
 TEMPLATE_DIR = REPO_ROOT / "templates"
 
+# Everything the builder owns. Anything else in vault/ - notably .obsidian/,
+# which holds the user's own graph layout, colours and workspace - is left
+# alone, because wiping a person's editor settings on every `make vault` is
+# not idempotence, it is data loss.
+GENERATED_FOLDERS = ("Clients", "Verified", "Scenario", "Sources")
+GENERATED_ROOT_NOTES = ("README.md",)
+
 
 class ScenarioInVerified(RuntimeError):
     """A forward-looking fact was about to be filed as settled. Never allow it."""
+
+
+def reset_generated(vault: Path = VAULT_DIR) -> None:
+    """Clear what the builder owns, leaving user-owned files in place."""
+    for folder in GENERATED_FOLDERS:
+        target = vault / folder
+        if target.exists():
+            shutil.rmtree(target)
+    for note in GENERATED_ROOT_NOTES:
+        (vault / note).unlink(missing_ok=True)
+    for folder in GENERATED_FOLDERS:
+        (vault / folder).mkdir(parents=True, exist_ok=True)
+
+
+# Folder -> graph colour. Seeded once so the graph is legible on first open;
+# never overwritten, because after that it belongs to whoever opened it.
+GRAPH_COLOURS = {
+    "Clients": "E8B04B",    # amber   - the people
+    "Verified": "4FA8E8",   # blue    - the record
+    "Scenario": "C97BD6",   # violet  - the hypotheses
+    "Sources": "8A8F98",    # grey    - raw rows, the outer leaves
+}
+
+
+def seed_obsidian_config(vault: Path = VAULT_DIR) -> bool:
+    """Pre-colour the graph by folder. Returns True if it wrote anything."""
+    config_dir = vault / ".obsidian"
+    graph_config = config_dir / "graph.json"
+    if graph_config.exists():
+        return False                     # the user's, not ours
+    config_dir.mkdir(parents=True, exist_ok=True)
+    graph_config.write_text(
+        json.dumps(
+            {
+                "collapse-filter": True,
+                "search": "",
+                "showTags": False,
+                "showAttachments": False,
+                "hideUnresolved": True,
+                "showOrphans": True,
+                "collapse-color-groups": False,
+                "colorGroups": [
+                    {"query": f"path:{folder}", "color": {"a": 1, "rgb": int(hexcode, 16)}}
+                    for folder, hexcode in GRAPH_COLOURS.items()
+                ],
+                "collapse-display": True,
+                "showArrow": True,
+                "textFadeMultiplier": -0.6,
+                "nodeSizeMultiplier": 1.4,
+                "lineSizeMultiplier": 1.2,
+                "collapse-forces": True,
+                "centerStrength": 0.42,
+                "repelStrength": 12,
+                "linkStrength": 0.75,
+                "linkDistance": 190,
+                "scale": 0.85,
+                "close": False,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return True
 
 
 def source_note_name(file: str, row_ref: str) -> str:
@@ -57,10 +127,8 @@ def build_vault() -> Path:
     dataset = load()
     env = _env()
 
-    if VAULT_DIR.exists():
-        shutil.rmtree(VAULT_DIR)          # regeneration is idempotent by construction
-    for folder in ("Clients", "Verified", "Sources"):
-        (VAULT_DIR / folder).mkdir(parents=True)
+    reset_generated(VAULT_DIR)
+    seeded = seed_obsidian_config(VAULT_DIR)
 
     # --- facts ------------------------------------------------------------
     fact_template = env.get_template("fact.md.j2")
@@ -71,7 +139,7 @@ def build_vault() -> Path:
         if fact["confidence"] == "scenario" or fact["kind"] == "scenario":
             raise ScenarioInVerified(
                 f"{fact['fact_id']} is forward-looking and may not be written to "
-                f"Verified/. Scenario rendering arrives in Phase 3."
+                f"Verified/. Scenario rendering arrives with scenario.py."
             )
         client_name = str(clients_index.loc[fact["client_id"], "client_name"])
         rendered = fact_template.render(
@@ -96,6 +164,7 @@ def build_vault() -> Path:
         folder.mkdir(parents=True, exist_ok=True)
         rendered = source_template.render(
             file=file,
+            file_stem=file.replace(".csv", "").replace(".json", ""),
             row_ref=row_ref,
             row=row,
             cited_fields=cited_fields[key],
@@ -119,6 +188,7 @@ def build_vault() -> Path:
             folder.mkdir(parents=True, exist_ok=True)
             rendered = source_template.render(
                 file=file,
+                file_stem=file.replace(".csv", "").replace(".json", ""),
                 row_ref=row_ref,
                 row=resolve_row(dataset, file, row_ref),
                 cited_fields=cited_fields[key],
@@ -147,10 +217,33 @@ def build_vault() -> Path:
         )
         (VAULT_DIR / "Clients" / f"{client['client_name']}.md").write_text(rendered)
 
+    # --- index notes ------------------------------------------------------
+    client_notes = sorted(
+        str(clients_index.loc[client_id, "client_name"])
+        for client_id in envelope["clients"]
+    )
+    (VAULT_DIR / "README.md").write_text(
+        env.get_template("vault_readme.md.j2").render(
+            clients=envelope["clients"],
+            client_notes=client_notes,
+            as_of=as_of,
+            fact_count=len(facts),
+            source_count=len(source_rows),
+        )
+    )
+    # Not "README": Obsidian resolves wikilinks by note name, so a second
+    # README anywhere in the vault makes every [[README]] ambiguous.
+    (VAULT_DIR / "Scenario" / "About Scenario.md").write_text(
+        env.get_template("scenario_readme.md.j2").render(as_of=as_of)
+    )
+
     notes = sum(1 for _ in VAULT_DIR.rglob("*.md"))
-    print(f"wrote vault/: {notes} notes "
-          f"({len(facts)} facts, {len(source_rows)} sources, "
-          f"{len(envelope['clients'])} client(s))")
+    print(
+        f"wrote vault/: {notes} notes "
+        f"({len(facts)} facts, {len(source_rows)} sources, "
+        f"{len(envelope['clients'])} client(s))"
+        + ("; seeded .obsidian/graph.json" if seeded else "")
+    )
     return VAULT_DIR
 
 

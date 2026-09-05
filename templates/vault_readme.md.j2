@@ -1,0 +1,78 @@
+---
+tags: [anchorline/index]
+generated: true
+---
+
+# Anchorline vault
+
+Generated from `build/facts.json` by `vault_build.py`. **Every note here is
+machine-written and will be overwritten by the next `make vault`** — if you want
+to change something, change the analyzer that produced it.
+
+Last built for **{{ clients | length }} client(s)** at snapshot **{{ as_of }}**:
+{{ fact_count }} facts, {{ source_count }} source rows.
+
+{% for name in client_notes %}
+- [[{{ name }}]]
+{% endfor %}
+
+---
+
+## The split this vault exists to enforce
+
+A private bank cannot let an advisory tool blur what happened with what might
+happen. So the two are not merely labelled differently here — they live in
+different folders, and the builder refuses to put one in the other.
+
+### `Verified/` — the record
+
+Settled fact. Every note is derived from rows in `data/` and nothing else. No
+figure in a headline was written by a language model; each one was computed and
+is listed under **Computed values**, with the exact rows it came from under
+**Sources**. Follow the links and you end at the dataset.
+
+**This is the folder an RM can put in front of a compliance reviewer.** A claim
+in here that cannot be traced to a row is not a presentation problem, it is a
+bug — and one the build refuses to produce.
+
+### `Scenario/` — the hypothesis
+
+Forward-looking analysis: what a portfolio would look like under conditions that
+have not occurred. Useful, and not the same kind of thing as the folder above.
+Nothing here is a statement about what happened, and nothing here may be shown
+as one.
+
+See [[About Scenario]]. *Currently empty by design — no scenario analysis has
+been generated yet.*
+
+### `Sources/` — the raw rows
+
+One note per dataset row that any fact cites, reproduced as it appears in
+`data/`. This is the end of the chain: there is nothing behind these notes.
+
+---
+
+## How to read a fact
+
+1. **Headline** — the claim, template-rendered from computed values.
+2. **Computed values** — every number the claim contains. If a figure appears in
+   the text, it appears here; that is enforced at construction, not by review.
+3. **Sources** — the rows it was computed from, linked into `Sources/`.
+4. **Cited by** — on a source note, which facts depend on that row.
+
+## The two invariants
+
+Both are enforced when a fact is constructed, so a fact that violates either
+cannot exist in memory, let alone reach this vault:
+
+1. **Every fact carries at least one source.** A fact with none cannot be built.
+2. **Every number in the rendered text also appears in `numbers`** — it was
+   computed, not written. Verbatim quotations of source text are exempt, and
+   each quotation is separately checked against the actual field value of a row
+   the fact cites.
+
+## Graph view
+
+Open the graph and the structure is the argument: clients at the centre, facts
+around them, and source rows as the outer leaves every chain terminates in.
+Colour groups are pre-configured by folder in `.obsidian/graph.json`.

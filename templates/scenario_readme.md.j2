@@ -1,0 +1,32 @@
+---
+tags: [anchorline/index, anchorline/scenario]
+generated: true
+---
+
+# Scenario — forward-looking analysis
+
+Part of the [[README|Anchorline vault]].
+
+**Empty by design.** No scenario analysis has been generated yet; this folder is
+scaffolded so the boundary exists before there is anything to put in it.
+
+## What belongs here
+
+Analysis of conditions that have **not occurred**. The obvious candidate in this
+dataset is the Strait of Hormuz situation, unresolved as of {{ as_of }}: what
+each book looks like if it reopens, and if it escalates further.
+
+## What does not belong here
+
+Anything that happened. Those go to `Verified/`.
+
+## Why this is a folder and not a label
+
+A caveat in a sentence can be skimmed past, reformatted away, or lost when
+someone copies a paragraph into an email. A directory boundary survives all of
+that. `vault_build.py` raises `ScenarioInVerified` rather than writing a
+forward-looking fact into the record, so the two cannot merge by accident.
+
+Every note that lands here will carry `confidence: scenario` in its frontmatter
+and a warning callout in its body, and will say plainly that it describes
+something that has not happened.
