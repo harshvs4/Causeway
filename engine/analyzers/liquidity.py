@@ -25,6 +25,12 @@ from engine.models import Fact, Source
 
 DAILY = "Daily"
 
+# A need the client may never incur is not the same claim as one they will.
+# The triage weights already discount a conditional need to 0.4; a fact that
+# still called it maximum severity was contradicting the ranking that reads it.
+CONDITIONAL = "conditional"
+CERTAINTY_WEIGHT = {True: 0.55, False: 1.0}
+
 
 def _pledged_portfolios(dataset: Dataset, client_id: str) -> dict[str, pd.Series]:
     facilities = dataset.credit_facilities
@@ -171,6 +177,17 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                 )
                 severity = 95
 
+            # Certainty belongs in the headline, not only the detail. "Say this"
+            # in the console renders headlines alone, so a conditional
+            # obligation whose caveat lives one level down would be spoken
+            # aloud as a settled one.
+            conditional = CONDITIONAL in str(need["certainty"]).lower()
+            qualifier = (
+                f" — conditional: {need['certainty']}"
+                if conditional
+                else f" — {need['certainty'].lower()}"
+            )
+
             facts.append(
                 Fact(
                     fact_id=f"F-{client_id.replace('-', '')}-LIQUIDITY-{need['need_id']}",
@@ -180,7 +197,7 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                         f"{need['description']}: {need['currency']} "
                         f"{float(need['amount']):,.0f} due between "
                         f"{need['due_from'].strftime('%Y-%m-%d')} and "
-                        f"{need['due_to'].strftime('%Y-%m-%d')}."
+                        f"{need['due_to'].strftime('%Y-%m-%d')}{qualifier}."
                     ),
                     detail=(
                         f"{amount_usd:,.0f} in USD terms. {verdict} Certainty is "
@@ -219,7 +236,7 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                     ),
                     as_of=LATEST_SNAPSHOT,
                     confidence="derived",
-                    severity=severity,
+                    severity=int(severity * CERTAINTY_WEIGHT[conditional]),
                 )
             )
 

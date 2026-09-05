@@ -285,3 +285,49 @@ def test_triage_surfaces_the_tightest_facility_in_the_book(ds):
     from engine.analyzers.triage import rank_book
     top_three = [s.client_id for s in rank_book(ds)[:3]]
     assert "CL-0014" in top_three
+
+
+# --- certainty must survive into the headline ------------------------------
+
+@pytest.fixture(scope="module")
+def cl2_liquidity(ds) -> dict[str, Fact]:
+    from engine.analyzers import liquidity
+    return {f.fact_id: f for f in liquidity.run(ds, ("CL-0002",))}
+
+
+def test_a_conditional_need_says_so_in_its_headline(cl2_liquidity):
+    """"Say this" renders headlines alone. A caveat one level down is a caveat
+    the RM will state aloud as settled fact."""
+    fact = cl2_liquidity["F-CL0002-LIQUIDITY-CN-002"]
+    assert "conditional" in fact.headline.lower()
+    assert "Conditional on the sale completing" in fact.headline
+
+
+def test_a_likely_need_is_not_dressed_up_as_conditional(cl2_liquidity):
+    fact = cl2_liquidity["F-CL0002-LIQUIDITY-CN-003"]
+    assert "conditional" not in fact.headline.lower()
+    assert "likely" in fact.headline.lower()
+
+
+def test_conditional_severity_agrees_with_the_triage_discount(cl2_liquidity):
+    """The ranking already discounts a conditional need. A fact calling it
+    maximum severity contradicted the ranking that reads it."""
+    conditional = cl2_liquidity["F-CL0002-LIQUIDITY-CN-002"]
+    likely = cl2_liquidity["F-CL0002-LIQUIDITY-CN-003"]
+    assert conditional.severity < likely.severity
+
+
+def test_the_conditional_need_no_longer_leads_say_this(ds):
+    """It is a real obligation, but not one of the three things to open with."""
+    from engine.analyzers import liquidity, lookthrough, collateral, tension
+    facts = (lookthrough.run(ds, ("CL-0002",)) + collateral.run(ds, ("CL-0002",))
+             + tension.run(ds, ("CL-0002",)) + liquidity.run(ds, ("CL-0002",)))
+    seen, top = set(), []
+    for fact in sorted(facts, key=lambda f: -f.severity):
+        if fact.severity < 60 or fact.kind in seen:
+            continue
+        seen.add(fact.kind)
+        top.append(fact.fact_id)
+        if len(top) == 3:
+            break
+    assert "F-CL0002-LIQUIDITY-CN-002" not in top
