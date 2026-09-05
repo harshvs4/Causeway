@@ -167,3 +167,78 @@ def test_only_one_stem_pair_exists_across_the_whole_book(ds):
                 )
         pairs |= {p for p in tension.shared_terms(wealth, other) if "/" in p}
     assert pairs == {"pharmaceutical/pharma"}
+
+
+# ===========================================================================
+# A fact states what was computed. It does not draw conclusions.
+# ===========================================================================
+
+# Language that asserts something about a person's state of mind, or tells the
+# RM what to do. Both are inferences: defensible ones, often, but not traceable
+# to a row - and this system's whole claim is that what it renders is.
+#
+# "His book is a bet on the blockade holding" and "he almost certainly doesn't
+# know" are good lines for a human to say out loud. They are the RM's judgement
+# built on the facts, not the facts, and the moment they are baked into rendered
+# text they become indistinguishable from the computed part.
+INFERENCE_LANGUAGE = (
+    "unaware", "does not know", "doesn't know", "may not realise", "may not know",
+    "probably", "almost certainly", "we recommend", "we advise", "we think",
+    "we believe", "should sell", "should reduce", "ought to", "clearly",
+    "is a bet", "no doubt", "obviously",
+)
+
+
+def _facts():
+    import json
+    from engine.loader import BUILD_DIR
+    return json.loads((BUILD_DIR / "facts.json").read_text())["facts"]
+
+
+def test_no_fact_asserts_what_a_client_knows_or_should_do():
+    offenders = []
+    for fact in _facts():
+        text = f"{fact['headline']} {fact['detail']}"
+        for quote in fact.get("quotes", []):
+            text = text.replace(quote, " ")   # quoted source text is data, not assertion
+        hits = [w for w in INFERENCE_LANGUAGE if w in text.lower()]
+        if hits:
+            offenders.append((fact["fact_id"], hits))
+    assert not offenders, f"inference baked into fact text: {offenders}"
+
+
+def test_the_scenario_facts_state_only_their_computed_effect():
+    """CL-0001 gains under escalation and loses under reopen. Those two numbers
+    together imply a directional exposure - and implying it is the RM's job,
+    not the fact's."""
+    scenario = {
+        f["fact_id"]: f for f in _facts()
+        if f["client_id"] == "CL-0001" and f["confidence"] == "scenario"
+    }
+    escalate = scenario["F-CL0001-SCENARIO-HORMUZ-ESCALATE"]
+    reopen = scenario["F-CL0001-SCENARIO-HORMUZ-REOPEN"]
+
+    assert escalate["numbers"]["impact_pct"] == pytest.approx(6.63, abs=0.01)
+    assert reopen["numbers"]["impact_pct"] == pytest.approx(4.35, abs=0.01)
+    assert "gains" in escalate["headline"] and "loses" in reopen["headline"]
+
+    # and neither draws the conclusion for the reader
+    for fact in (escalate, reopen):
+        combined = f"{fact['headline']} {fact['detail']}".lower()
+        assert "bet" not in combined
+        assert "exposed" not in combined
+        assert "know" not in combined
+
+
+def test_every_number_in_every_scenario_fact_has_provenance():
+    from engine.grounding import explain, retrievable_sources
+    import json
+    from engine.loader import BUILD_DIR
+    envelope = json.loads((BUILD_DIR / "facts.json").read_text())
+    for fact in envelope["facts"]:
+        if fact["confidence"] != "scenario":
+            continue
+        sources = retrievable_sources(envelope, fact["client_id"])
+        text = f"{fact['headline']} {fact['detail']}"
+        ungrounded = [c.written for c in explain(text, sources) if not c.grounded]
+        assert ungrounded == [], f"{fact['fact_id']}: {ungrounded}"

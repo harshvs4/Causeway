@@ -154,6 +154,26 @@ cue that arrives late in a live call is worse than no cue.
 
 ---
 
+## Working on this with more than one person
+
+The boundary is not by folder, because the thing worth protecting does not live
+in one:
+
+**Anything that constructs or emits a `Fact` is shared, invariant-protected
+surface** — wherever it sits. An analyzer, an adapter around someone else's
+computation, the vault builder, anything that renders fact text. Changes there
+need both people aware, even when one person does the writing. A second route to
+the screen that skips the invariants makes them decorative, and that has already
+happened once: a scenario writer rendered notes straight from dicts, bypassing
+both checks, and had to be replaced with an adapter.
+
+**Everything else is single-owner** — rendering, styling, and API routes that
+read facts without constructing them.
+
+The line matters because a `Fact` is the only thing this system promises about.
+
+---
+
 ## Documentation
 
 - [`docs/anchorline-project-plan.md`](docs/anchorline-project-plan.md) — the problem and the product
