@@ -105,3 +105,68 @@ def test_every_headline_the_engine_wrote_checks_out_against_its_own_numbers():
         allowed = list((fact.get("numbers") or {}).values())
         bad = ungrounded(fact["headline"], allowed)
         assert bad == [], f"{fact['fact_id']}: {bad}"
+
+
+# ===========================================================================
+# What the agent is actually handed, versus what the engine computed
+# ===========================================================================
+
+def _envelope():
+    return json.loads((BUILD_DIR / "facts.json").read_text())
+
+
+def test_utilisation_is_not_a_computed_fact_number():
+    """72.22% appears in no Fact's numbers - the engine never derives it."""
+    from engine.grounding import grounded_values as strict
+    values = strict(_envelope()["facts"], "CL-0002")
+    assert not is_supported(72.22, 2, values)
+
+
+def test_utilisation_is_in_the_row_get_fact_hands_over():
+    """But it is a real column on the facility the fact cites."""
+    envelope = _envelope()
+    row = envelope["source_rows"]["credit_facilities.csv::CF-0001"]
+    assert float(row["utilisation_pct_current"]) == pytest.approx(72.22)
+    # and it is a different measure from LTV, against a different denominator
+    assert float(row["drawn_2026-08-26"]) / float(row["credit_limit"]) * 100 == \
+        pytest.approx(72.22, abs=0.01)
+    assert float(row["drawn_2026-08-26"]) / float(row["lending_value_2026-08-26"]) * 100 == \
+        pytest.approx(73.71, abs=0.01)
+
+
+def test_retrievable_values_accepts_what_the_agent_could_have_read():
+    from engine.grounding import retrievable_values
+    values = retrievable_values(_envelope(), "CL-0002")
+    assert is_supported(72.22, 2, values)
+
+
+def test_the_spoken_transcript_is_clean_against_the_right_set():
+    """The line from the live Test Audio run. Honest retrieval, not fabrication."""
+    from engine.grounding import retrievable_values
+    said = ("The current utilisation of the facility is 72.22%, the LTV is "
+            "73.71%, and the drawn amount is 6,500,000.")
+    assert ungrounded(said, retrievable_values(_envelope(), "CL-0002")) == []
+
+
+@pytest.mark.parametrize("said, bad", [
+    ("My Helios weighting is 31.20%.", "31.20"),
+    ("The stake is worth USD 44,500,000.", "44,500,000"),
+    ("Utilisation is 61.50%.", "61.50"),
+    ("My LTV is 88.40%.", "88.40"),
+])
+def test_widening_does_not_let_fabrications_through(said, bad):
+    """The looser set must still catch a number nothing in the data supports."""
+    from engine.grounding import retrievable_values
+    assert bad in ungrounded(said, retrievable_values(_envelope(), "CL-0002"))
+
+
+def test_retrievable_is_scoped_to_rows_actually_cited():
+    """A number from a row no fact cites is still unsupported."""
+    from engine.grounding import retrievable_values
+    envelope = _envelope()
+    values = retrievable_values(envelope, "CL-0002")
+    cited = {f"{s['file']}::{s['row_ref']}"
+             for f in envelope["facts"] if f["client_id"] == "CL-0002"
+             for s in f["sources"]}
+    assert cited, "no citations to scope to"
+    assert len(values) < sum(len(r) for r in envelope["source_rows"].values())

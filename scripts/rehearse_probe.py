@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from engine.grounding import grounded_values, ungrounded  # noqa: E402
+from engine.grounding import retrievable_values, ungrounded  # noqa: E402
 
 API = os.environ.get("DOGRAH_API", "http://localhost:8000/api/v1")
 WORKFLOW_NAME = os.environ.get("REHEARSE_WORKFLOW", "Anchorline Rehearse")
@@ -160,9 +160,11 @@ def main() -> None:
     workflow_id = workflow["id"]
     print(f"workflow: {workflow.get('name')}  (id {workflow_id})\n")
 
-    allowed = grounded_values(
+    # The agent is handed whole source rows by get_fact, not just computed
+    # numbers, so it can truthfully state a field the engine never derived.
+    allowed = retrievable_values(
         json.loads((Path(__file__).resolve().parents[1] / 'build' / 'facts.json')
-                   .read_text())['facts'], 'CL-0002')
+                   .read_text()), 'CL-0002')
 
     findings: list[str] = []
     evidence: list[tuple[str, list, list]] = []

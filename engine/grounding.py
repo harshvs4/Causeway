@@ -87,10 +87,51 @@ def ungrounded(text: str, allowed: Iterable[float],
 
 
 def grounded_values(facts: Iterable[dict], client_id: str | None = None) -> set[float]:
-    """Every number the engine computed, optionally for one client."""
+    """Every number the engine computed, optionally for one client.
+
+    This is the strict set: values a Fact asserts. Use it to check text the
+    engine authored. It is NOT the right set for checking what a voice agent
+    said, because the agent is handed more than this - see retrievable_values.
+    """
     values: set[float] = set()
     for fact in facts:
         if client_id and fact.get("client_id") != client_id:
             continue
         values.update(float(v) for v in (fact.get("numbers") or {}).values())
+    return values
+
+
+def retrievable_values(envelope: dict, client_id: str | None = None) -> set[float]:
+    """Everything an agent could legitimately have been handed for one client.
+
+    get_fact returns a Fact's computed numbers *and* the full source rows it
+    cites, so a field the engine never computed is still something the agent
+    can read and state truthfully. CF-0001 carries utilisation_pct_current
+    (drawn / credit limit) alongside the LTV the engine derives (drawn /
+    lending value); both are real, they are different measures, and only one
+    is in `numbers`.
+
+    Checking a transcript against `grounded_values` alone therefore reports
+    honest retrieval as fabrication. This widens the set to the rows actually
+    cited - and no further, so a number from some row the agent never saw is
+    still caught.
+    """
+    facts = [
+        f for f in envelope.get("facts", [])
+        if not client_id or f.get("client_id") == client_id
+    ]
+    values = grounded_values(facts)
+    cited = {
+        f"{source['file']}::{source['row_ref']}"
+        for fact in facts
+        for source in fact.get("sources", [])
+    }
+    for key in cited:
+        for raw in (envelope.get("source_rows", {}).get(key) or {}).values():
+            if isinstance(raw, bool) or raw is None:
+                continue
+            try:
+                values.add(float(raw))
+            except (TypeError, ValueError):
+                continue
     return values
