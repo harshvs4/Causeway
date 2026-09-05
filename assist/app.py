@@ -45,11 +45,19 @@ COOLDOWN_SECONDS = 90.0
 # context, the whole call is too much.
 WINDOW_CHARS = 400
 
-# Kinds that are never a live cue. "You are ranked 1 of 20 this week" is useful
-# on a Monday morning and useless mid-sentence, and its boilerplate detail is
-# identical across clients, so it matches loosely on words like "trust" and
-# "score" and crowds out facts that answer the actual question.
-NON_CONVERSATIONAL_KINDS = frozenset({"triage"})
+# Kinds that never surface live.
+#
+#   triage   — "you are ranked 1 of 20 this week" is a Monday fact and useless
+#              mid-sentence, and its boilerplate matches loosely enough to crowd
+#              out facts that answer the actual question.
+#
+#   scenario — this is the important one. Everything reachable from here answers
+#              "what is true", and a forward-looking hypothesis returned into
+#              that stream is indistinguishable from the record by the time it
+#              reaches a voice answer. Scenario analysis belongs on the client
+#              page, in vault/Scenario, and on GET /scenario, where the caller
+#              is told what it is. Never in a live cue and never in an answer.
+NON_CONVERSATIONAL_KINDS = frozenset({"triage", "scenario"})
 
 # How many cards to put on screen at once. More than this is not a prompter,
 # it is a reading task in the middle of a conversation.
@@ -209,6 +217,74 @@ async def health() -> dict[str, Any]:
         "clients": sorted(_indexes),
         "facts": len(_facts_by_id),
         "as_of": _envelope.get("as_of"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Read routes ported from the retired api/main.py. They live here rather than in
+# a second service because two FastAPI apps serving overlapping views of the
+# same facts is how they drift apart - and the other one bound :8000, which is
+# Dograh's API port.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/attribution/{client_id}")
+async def attribution(client_id: str) -> dict[str, Any]:
+    """What moved, and the dated event that reaches it."""
+    facts = [
+        f for f in _envelope["facts"]
+        if f["client_id"] == client_id and f["kind"] == "attribution"
+    ]
+    return {"client_id": client_id, "facts": sorted(facts, key=lambda f: -f["severity"])}
+
+
+@app.get("/scenario/{client_id}")
+async def scenario(client_id: str) -> dict[str, Any]:
+    """Forward-looking analysis. Never mixed with the record - different route,
+    different confidence, and the caller is told so in the payload."""
+    facts = [
+        f for f in _envelope["facts"]
+        if f["client_id"] == client_id and f["confidence"] == "scenario"
+    ]
+    return {
+        "client_id": client_id,
+        "caveat": "These describe conditions that have not occurred. Not forecasts.",
+        "facts": sorted(facts, key=lambda f: -f["severity"]),
+    }
+
+
+class VoiceQuery(BaseModel):
+    client_id: str
+    question: str
+
+
+@app.post("/voice-query")
+async def voice_query(query: VoiceQuery) -> dict[str, Any]:
+    """A grounded answer to a spoken question, assembled from fact headlines.
+
+    No generation. The answer is the facts, concatenated - so every figure in it
+    was computed and traces to a row. Scenario facts are excluded: a question
+    about what is true must never be answered with what might be.
+    """
+    index = _indexes.get(query.client_id)
+    if index is None:
+        return {"answer": None, "reason": f"no facts for {query.client_id}", "facts_used": []}
+
+    hits = index.search(query.question, limit=3, min_score=MIN_RELEVANCE,
+                        relative_cutoff=RELATIVE_CUTOFF)
+    if not hits:
+        return {
+            "answer": None,
+            "reason": "nothing on record answers that",
+            "facts_used": [],
+        }
+    return {
+        "answer": " ".join(hit.fact["headline"] for hit in hits),
+        "facts_used": [hit.fact_id for hit in hits],
+        "sources": [
+            {"file": s["file"], "row_ref": s["row_ref"]}
+            for hit in hits for s in hit.fact["sources"]
+        ],
     }
 
 

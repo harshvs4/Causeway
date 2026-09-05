@@ -115,3 +115,25 @@ def test_persona_exists_and_binds_the_agent_to_the_tools():
     assert "get_client_brief" in persona and "search_facts" in persona
     assert "only if a tool returned it" in persona
     assert "never invent a percentage" in persona
+
+
+def test_search_never_hands_the_agent_a_hypothesis():
+    """The Rehearse agent uses search_facts. A forward-looking fact returned
+    there could be stated in conversation as though it had happened."""
+    for question in ["why is my collateral under pressure",
+                     "what about the strait of hormuz",
+                     "what happens if energy prices move"]:
+        hits = search_facts("CL-0002", question, 5)
+        assert all("SCENARIO" not in r["fact_id"] for r in hits["results"]), question
+
+
+def test_search_results_state_their_confidence():
+    for result in search_facts("CL-0002", "collateral", 3)["results"]:
+        assert result["confidence"] in ("verified", "derived")
+
+
+def test_a_scenario_fact_is_still_reachable_by_id():
+    """Excluded from search, not hidden — and it declares what it is."""
+    fact = get_fact("F-CL0002-SCENARIO-HORMUZ-ESCALATE")
+    assert fact["confidence"] == "scenario"
+    assert "has not happened" in fact["detail"]

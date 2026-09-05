@@ -31,8 +31,10 @@ export const SECTIONS = [
     id: "changed",
     title: "What changed",
     note: "Movement in the facility and the positions behind it, between the five snapshots.",
-    kinds: ["collateral", "attribution"],
-    pick: (f: Fact) => f.kind === "collateral" && !f.fact_id.includes("DRIVER"),
+    kinds: ["attribution", "collateral"],
+    pick: (f: Fact) =>
+      f.kind === "attribution" ||
+      (f.kind === "collateral" && !f.fact_id.includes("DRIVER")),
   },
   {
     id: "why",
@@ -69,7 +71,9 @@ export function sayThis(facts: Fact[], n = 3): Fact[] {
   const seen = new Set<string>();
   const out: Fact[] = [];
   for (const fact of [...facts].sort((a, b) => b.severity - a.severity)) {
-    if (fact.kind === "triage" || fact.severity < 60) continue;
+    // Never open a client conversation with a hypothesis.
+    if (fact.kind === "triage" || fact.kind === "scenario") continue;
+    if (fact.severity < 60) continue;
     if (seen.has(fact.kind)) continue;
     seen.add(fact.kind);
     out.push(fact);
@@ -82,7 +86,13 @@ export function bySection(facts: Fact[]) {
   const used = new Set<string>();
   return SECTIONS.map((section) => {
     const items = facts
-      .filter((f) => f.kind !== "triage" && !used.has(f.fact_id) && section.pick(f))
+      .filter(
+        (f) =>
+          f.kind !== "triage" &&
+          f.kind !== "scenario" &&
+          !used.has(f.fact_id) &&
+          section.pick(f)
+      )
       .sort((a, b) => b.severity - a.severity);
     items.forEach((f) => used.add(f.fact_id));
     return { ...section, items };

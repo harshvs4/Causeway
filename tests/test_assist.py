@@ -1,6 +1,7 @@
 """Assist: transcript in, grounded cue cards out, no audio path anywhere."""
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -172,11 +173,36 @@ def test_a_cue_is_a_fact_never_generated_prose(fresh):
 
 
 def test_the_service_exposes_no_audio_route():
-    """The constraint is structural: there is no speaker to disable."""
+    """The constraint is structural: there is no speaker to disable.
+
+    "voice" alone is not the test - /voice-query takes a spoken question and
+    returns text, which is the whole point. What must not exist is anything
+    that produces sound.
+    """
     from assist.app import app
     routes = " ".join(getattr(r, "path", "") for r in app.routes).lower()
-    for forbidden in ("speak", "tts", "audio", "voice", "say"):
+    for forbidden in ("speak", "tts", "audio", "say", "synthesi"):
         assert forbidden not in routes
+
+
+def test_no_speech_synthesis_dependency_is_reachable():
+    """If the service could speak, some library would have to be importable."""
+    import assist.app as module
+    source = Path(module.__file__).read_text().lower()
+    for library in ("pyttsx", "elevenlabs", "gtts", "azure.cognitiveservices.speech",
+                    "openai.audio", "soundfile", "pyaudio"):
+        assert library not in source
+
+
+def test_a_voice_query_returns_text_and_its_sources_only():
+    from assist.app import load_facts
+    load_facts()
+    from assist.app import voice_query, VoiceQuery
+    result = asyncio.run(voice_query(VoiceQuery(client_id="CL-0002",
+                                                question="is the collateral under pressure")))
+    assert isinstance(result.get("answer"), (str, type(None)))
+    assert "audio" not in result and "speech" not in result
+    assert set(result) <= {"answer", "facts_used", "sources", "reason"}
 
 
 # --- relevance shape -------------------------------------------------------
@@ -189,10 +215,12 @@ def test_a_tight_cluster_surfaces_together(fresh):
     assert spread < 0.1, "these are effectively tied and should not be split by rank"
 
 
-def test_a_clear_winner_is_not_padded_out_to_three(fresh):
-    """When one fact plainly answers the question, do not add filler."""
+def test_a_clear_winner_leads_and_the_tail_is_short(fresh):
+    """When one fact plainly answers the question it leads, and the relative
+    cutoff keeps the tail short rather than padding to three."""
     cues = say("he says he cannot fund the family trust")
-    assert len(cues) == 1
+    assert cues[0]["fact_id"] == "F-CL0002-LIQUIDITY-CN-003"
+    assert len(cues) <= 2
 
 
 def test_relative_cutoff_survives_a_corpus_change():

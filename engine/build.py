@@ -12,10 +12,12 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable
 
 from engine.analyzers import (
+    attribution,
     collateral,
     liquidity,
     lookthrough,
     mandate,
+    scenario,
     tension,
     triage,
 )
@@ -29,12 +31,14 @@ SCHEMA_VERSION = 1
 CLIENTS: tuple[str, ...] = ("CL-0002", "CL-0001")
 
 ANALYZERS: list[tuple[str, Callable[[Dataset], Iterable[Fact]]]] = [
+    ("attribution", lambda ds: attribution.run(ds, CLIENTS)),
     ("lookthrough", lambda ds: lookthrough.run(ds, CLIENTS)),
     ("collateral", lambda ds: collateral.run(ds, CLIENTS)),
     ("tension", lambda ds: tension.run(ds, CLIENTS)),
     ("liquidity", lambda ds: liquidity.run(ds, CLIENTS)),
     ("mandate", lambda ds: mandate.run(ds, CLIENTS)),
     ("triage", lambda ds: triage.run(ds, CLIENTS)),
+    ("scenario", lambda ds: scenario.run(ds, CLIENTS)),
 ]
 
 

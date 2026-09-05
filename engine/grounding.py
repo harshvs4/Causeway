@@ -31,7 +31,10 @@ _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _IDENTIFIER = re.compile(r"\b[A-Z]{1,5}-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
 _NUMERAL = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 
-SCALES = (1.0, 1e2, 1e3, 1e4, 1e6, 1e9)
+# Scales people actually speak in. 1e2 and 1e4 were in this list and were a
+# mistake: they let 132,000 be accepted as "13.2", so an attribution figure
+# could vouch for a liquidity one. Nobody says a number in ten-thousands.
+SCALES = (1.0, 1e3, 1e6, 1e9)
 MAGNITUDES = range(0, 10)          # round to units, tens, hundreds, thousands...
 
 

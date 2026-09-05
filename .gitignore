@@ -220,3 +220,5 @@ __marimo__/
 # Anchorline generated artefacts (rebuilt by `make build` / `make vault`)
 vault/
 console/public/facts.json
+
+.DS_Store

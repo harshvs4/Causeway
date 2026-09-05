@@ -136,16 +136,23 @@ def build_vault() -> Path:
     cited_by: dict[str, list[str]] = defaultdict(list)
 
     for fact in facts:
-        if fact["confidence"] == "scenario" or fact["kind"] == "scenario":
+        # Routing by confidence, not by hope. A forward-looking fact goes to
+        # Scenario/ and nowhere else; if the two ever disagreed - kind says
+        # scenario, confidence does not, or the reverse - that is a bug worth
+        # stopping the build for, not papering over.
+        forward_looking = fact["confidence"] == "scenario"
+        if forward_looking != (fact["kind"] == "scenario"):
             raise ScenarioInVerified(
-                f"{fact['fact_id']} is forward-looking and may not be written to "
-                f"Verified/. Scenario rendering arrives with scenario.py."
+                f"{fact['fact_id']}: kind={fact['kind']!r} and "
+                f"confidence={fact['confidence']!r} disagree about whether this "
+                f"describes something that happened."
             )
+        folder = "Scenario" if forward_looking else "Verified"
         client_name = str(clients_index.loc[fact["client_id"], "client_name"])
         rendered = fact_template.render(
             fact=fact, client_note=client_name, as_of=as_of
         )
-        (VAULT_DIR / "Verified" / f"{fact['fact_id']}.md").write_text(rendered)
+        (VAULT_DIR / folder / f"{fact['fact_id']}.md").write_text(rendered)
         for source in fact["sources"]:
             key = f"{source['file']}::{source['row_ref']}"
             cited_by[key].append(fact["fact_id"])

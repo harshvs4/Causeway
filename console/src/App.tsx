@@ -3,10 +3,11 @@ import type { Envelope, Fact } from "./types";
 import Assist from "./Assist";
 import Book from "./Book";
 import Client from "./Client";
+import Scenario from "./Scenario";
 import FactDrawer from "./FactDrawer";
 import "./styles.css";
 
-type View = "book" | "client" | "assist";
+type View = "book" | "client" | "scenario" | "assist";
 
 const DOGRAH_URL = "http://localhost:3010";
 
@@ -72,6 +73,9 @@ export default function App() {
               </button>
             );
           })}
+          <button aria-current={view === "scenario"} onClick={() => setView("scenario")}>
+            Scenario
+          </button>
           <button aria-current={view === "assist"} onClick={() => setView("assist")}>
             Live assist
           </button>
@@ -101,6 +105,9 @@ export default function App() {
         {view === "book" && <Book envelope={data} onOpenClient={openClient} />}
         {view === "client" && (
           <Client envelope={data} clientId={clientId} onOpenFact={setSelected} />
+        )}
+        {view === "scenario" && (
+          <Scenario envelope={data} clientId={clientId} onOpenFact={setSelected} />
         )}
         {view === "assist" && <Assist clientId={clientId} />}
       </main>

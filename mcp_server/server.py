@@ -85,9 +85,19 @@ def _facts_for(client_id: str) -> list[dict]:
     return [f for f in _envelope()["facts"] if f["client_id"] == client_id]
 
 
+# Kept out of search for the same reason Assist keeps them out of cues: a voice
+# agent asking "what is known about the collateral" must not be handed a
+# forward-looking hypothesis it can then state in a conversation. Scenario facts
+# remain reachable by id through get_fact, where their confidence is explicit.
+UNSEARCHABLE_KINDS = frozenset({"scenario"})
+
+
 @lru_cache(maxsize=8)
 def _index(client_id: str) -> FactIndex:
-    return FactIndex(_facts_for(client_id), _envelope().get("source_rows", {}))
+    searchable = [
+        f for f in _facts_for(client_id) if f["kind"] not in UNSEARCHABLE_KINDS
+    ]
+    return FactIndex(searchable, _envelope().get("source_rows", {}))
 
 
 # --------------------------------------------------------------------------
@@ -205,6 +215,7 @@ def search_facts(client_id: str, query: str, limit: int = 5) -> dict[str, Any]:
             {
                 "fact_id": hit.fact["fact_id"],
                 "kind": hit.fact["kind"],
+                "confidence": hit.fact["confidence"],
                 "severity": hit.fact["severity"],
                 "relevance": round(hit.score, 3),
                 "headline": hit.fact["headline"],

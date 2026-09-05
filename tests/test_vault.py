@@ -67,6 +67,7 @@ def test_client_note_links_to_every_one_of_its_facts(vault):
 
 def test_source_notes_link_back_to_the_facts_that_cite_them(vault):
     fact_notes = {p.stem for p in (vault / "Verified").glob("*.md")}
+    fact_notes |= {p.stem for p in (vault / "Scenario").glob("*.md")}
     for path in (vault / "Sources").rglob("*.md"):
         text = path.read_text()
         if "## Cited by" not in text:
@@ -109,13 +110,17 @@ def test_scenario_folder_is_scaffolded(vault):
     assert (vault / "Scenario").is_dir()
 
 
-def test_scenario_folder_holds_no_facts_yet(vault):
-    """Empty by design: the boundary exists before there is anything to put in it."""
-    fact_notes = [
-        p for p in (vault / "Scenario").glob("*.md")
-        if "fact_id:" in p.read_text()
-    ]
-    assert fact_notes == []
+def test_scenario_folder_holds_only_hypotheses(vault):
+    """Whatever lands here must declare itself forward-looking."""
+    notes = [p for p in (vault / "Scenario").glob("*.md") if "fact_id:" in p.read_text()]
+    assert notes, "scenario analysis exists and should be rendered"
+    for note in notes:
+        assert "confidence: scenario" in note.read_text()
+
+
+def test_no_hypothesis_leaks_into_the_record(vault):
+    for note in (vault / "Verified").glob("*.md"):
+        assert "confidence: scenario" not in note.read_text()
 
 
 def test_vault_readme_explains_the_split(vault):
