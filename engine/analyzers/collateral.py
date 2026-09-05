@@ -195,6 +195,59 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
                     )
                 )
 
+        # --- cures: the mirror image, and the more interesting one ---------
+        # A facility that leaves breach because the market moved was not fixed
+        # by anybody. That distinction changes what the RM should say next.
+        for step in moves:
+            if not (step.frm.ltv >= trigger > step.to.ltv):
+                continue
+            drawn_change = step.to.drawn - step.frm.drawn
+            lending_change = step.to.lending_value - step.frm.lending_value
+            if step.driver == MARKET_DRIVEN:
+                verdict = (
+                    f"Nothing was done: drawn was unchanged at "
+                    f"{step.to.drawn:,.0f} across the window and the collateral "
+                    f"revalued upward by {lending_change:,.0f}. The facility was "
+                    f"cured by an event, not by an action."
+                )
+            else:
+                verdict = (
+                    f"The position was actively reduced: drawn moved "
+                    f"{drawn_change:+,.0f} over the window."
+                )
+            facts.append(
+                Fact(
+                    fact_id=f"F-{client_id.replace('-', '')}-COLLAT-CURE",
+                    client_id=client_id,
+                    kind="collateral",
+                    headline=(
+                        f"{facility_id} came back under its {trigger:.2f}% trigger "
+                        f"at {step.to.snapshot} by {step.driver}: LTV "
+                        f"{step.frm.ltv:.2f}% to {step.to.ltv:.2f}%."
+                    ),
+                    detail=(
+                        f"{verdict} Holding drawn fixed, the collateral alone moved "
+                        f"LTV {step.market_effect_pp:+.2f} points; holding collateral "
+                        f"fixed, drawing alone moved it {step.draw_effect_pp:+.2f} "
+                        f"points."
+                    ),
+                    numbers={
+                        "ltv_before_pct": step.frm.ltv,
+                        "ltv_after_pct": step.to.ltv,
+                        "trigger_pct": trigger,
+                        "drawn_after": step.to.drawn,
+                        "drawn_change": drawn_change,
+                        "lending_change": lending_change,
+                        "market_effect_pp": step.market_effect_pp,
+                        "draw_effect_pp": step.draw_effect_pp,
+                    },
+                    sources=(path_source,),
+                    as_of=step.to.snapshot,
+                    confidence="derived",
+                    severity=60,
+                )
+            )
+
         headroom = latest.lending_value - latest.drawn
         distance_pp = trigger - latest.ltv
         facts.append(

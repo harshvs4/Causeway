@@ -1,0 +1,66 @@
+# Anchorline triage weights.
+#
+# The score is an ORDERING DEVICE, not a probability. It exists to answer "who
+# needs a call first thing on Monday", and it is shown in the UI with these
+# weights visible so the ranking is arguable rather than oracular.
+#
+# The tiering behind the numbers:
+#   dated consequences   collateral, liquidity   - something happens on a date
+#   undated but binding  tension, concentration  - true last month, true next month
+#   governance           mandate                 - a rule the bank set and can waive
+#   hygiene              contact, kyc            - matters over a quarter, not a day
+
+weights:
+  # Only signal with a hard, dated, external consequence: a margin call is the
+  # bank acting on the client. Nothing else here can force a sale.
+  collateral: 25
+
+  # A promise the client has already made that the book cannot fund. Below
+  # collateral only because the dates are months out rather than days.
+  liquidity: 20
+
+  # A documented objective contradicted by the actual book is a suitability
+  # finding, not a market event. Above mandate because a mandate breach violates
+  # a rule the bank set and can waive, whereas a divergence from what the client
+  # said they wanted has no waiver and cannot be cured by rebalancing inside a
+  # band. Above concentration because it is that same measurement plus documented
+  # intent that contradicts it - strictly more information, and the part that
+  # makes it a conversation rather than a chart. Below the dated signals because
+  # it has no deadline.
+  tension: 18
+
+  # The largest driver of unexpected loss, but a standing condition rather than
+  # an event.
+  concentration: 16
+
+  # Governance exposure and a real compliance conversation, but often known and
+  # sometimes waived.
+  mandate: 12
+
+  # Relationship hygiene. Matters over a quarter; almost never the reason to
+  # call today.
+  contact: 6
+
+  # Admin, not a conversation. Low enough to break ties rather than manufacture
+  # urgency.
+  kyc: 3
+
+parameters:
+  # Distance to a margin-call trigger scores on a steep curve, because 1 point
+  # of headroom is qualitatively different from 10, not ten times better.
+  collateral_headroom_pp: 10.0
+
+  # Cash needs recorded as conditional are discounted: they may never happen.
+  conditional_need_factor: 0.4
+  # Uncalled commitments are discounted because call timing is the fund's
+  # choice, not the client's.
+  uncalled_commitment_factor: 0.6
+
+  # Concentration is scored from the mandate single-position limit upward, so
+  # the floor is the bank's own stated view of "too much in one name" rather
+  # than a threshold invented here.
+  concentration_floor_pct: 15.0
+  concentration_span_pct: 45.0
+
+  # Contact recency saturates at half a year.
+  contact_saturation_days: 180.0

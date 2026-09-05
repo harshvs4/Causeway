@@ -166,3 +166,122 @@ def test_a_market_driven_move_is_labelled_as_such(ds):
 def test_all_phase1_facts_carry_sources(lookthrough_facts, collateral_facts):
     for fact in list(lookthrough_facts.values()) + list(collateral_facts.values()):
         assert len(fact.sources) >= 1
+
+
+# ===========================================================================
+# CL-0001: golden numbers, verified against raw rows before these analyzers
+# ===========================================================================
+
+@pytest.fixture(scope="module")
+def cl1_lookthrough(ds) -> dict[str, Fact]:
+    return {f.fact_id: f for f in lookthrough.run(ds, ("CL-0001",))}
+
+
+@pytest.fixture(scope="module")
+def cl1_collateral(ds) -> dict[str, Fact]:
+    return {f.fact_id: f for f in collateral.run(ds, ("CL-0001",))}
+
+
+@pytest.fixture(scope="module")
+def cl1_tension(ds) -> dict[str, Fact]:
+    from engine.analyzers import tension
+    return {f.fact_id: f for f in tension.run(ds, ("CL-0001",))}
+
+
+def test_bara_is_97_9683_pct_of_the_custody_account(cl1_lookthrough):
+    fact = cl1_lookthrough["F-CL0001-CONCENTRATION-PF-0002"]
+    assert fact.numbers["combined_pct"] == pytest.approx(97.9683, abs=1e-4)
+
+
+def test_bara_true_book_exposure_is_44_9853_pct(cl1_lookthrough):
+    """Direct plus the leg reached through the worst-of note."""
+    fact = cl1_lookthrough["F-CL0001-BOOKEXPOSURE"]
+    assert fact.numbers["book_pct"] == pytest.approx(44.9853, abs=1e-4)
+    assert fact.numbers["direct_pct"] == pytest.approx(41.4156, abs=1e-4)
+    assert fact.numbers["indirect_pct"] == pytest.approx(3.5697, abs=1e-4)
+
+
+def test_bara_book_exposure_spans_both_accounts(cl1_lookthrough):
+    refs = {s.row_ref.split("|")[0]
+            for s in cl1_lookthrough["F-CL0001-BOOKEXPOSURE"].sources}
+    assert refs == {"PF-0001", "PF-0002"}
+
+
+def test_cf0005_opens_in_breach_and_is_cured_by_the_market(cl1_collateral):
+    """The mirror of CF-0001: cured by an event, not by an action."""
+    breach = cl1_collateral["F-CL0001-COLLAT-BREACH"]
+    assert breach.as_of == "2025-12-31"
+    # 8,000,000 / 10,191,000 = 78.50063781768227; shipped column rounds to 78.5
+    assert breach.numbers["ltv_pct"] == pytest.approx(78.5006, abs=1e-4)
+    assert breach.numbers["trigger_pct"] == 70.0
+
+    cure = cl1_collateral["F-CL0001-COLLAT-CURE"]
+    assert MARKET_DRIVEN in cure.headline
+    assert cure.numbers["drawn_change"] == 0.0        # nobody did anything
+    assert cure.numbers["lending_change"] > 0
+
+
+def test_the_wrapper_reconcentration_names_the_account_boundary(cl1_tension):
+    """The sharpest finding: the note sits in the account he called safe."""
+    fact = cl1_tension["F-CL0001-TENSION-WRAPPER-SYN-SP-0505"]
+    assert fact.numbers["existing_exposure_pct"] == pytest.approx(44.9853, abs=1e-4)
+    assert "PF-0002" in fact.detail and "PF-0001" in fact.detail
+
+
+def test_source_of_wealth_tension_reports_the_matched_term(cl1_tension):
+    fact = cl1_tension["F-CL0001-TENSION-SOURCEOFWEALTH"]
+    assert "energy" in fact.detail
+    assert fact.numbers["book_pct"] == pytest.approx(44.9853, abs=1e-4)
+
+
+def test_tension_cites_the_rm_note_that_mentions_the_industry(cl1_tension):
+    """N-002 records the coal conversation; the citation is derived, not chosen."""
+    fact = cl1_tension["F-CL0001-TENSION-SOURCEOFWEALTH"]
+    notes = {s.row_ref for s in fact.sources if s.file == "rm_notes.json"}
+    assert "N-002" in notes
+
+
+# --- tension matcher -------------------------------------------------------
+
+def test_stem_matching_catches_the_pharma_case():
+    from engine.analyzers.tension import shared_terms, significant_tokens
+    wealth = significant_tokens("Executive compensation - pharmaceutical group board member")
+    holding = significant_tokens("Kanto Pharma Holdings KK")
+    assert shared_terms(wealth, holding) == {"pharmaceutical/pharma"}
+
+
+def test_stem_matching_does_not_double_report_an_exact_match():
+    from engine.analyzers.tension import shared_terms
+    assert shared_terms({"industrial"}, {"industrial", "industrials"}) == {"industrial"}
+
+
+def test_stem_matching_does_not_invent_a_link():
+    from engine.analyzers.tension import shared_terms, significant_tokens
+    wealth = significant_tokens("Entrepreneur - cross-border e-commerce platform")
+    holding = significant_tokens("Helios Cloud Systems Inc")
+    assert shared_terms(wealth, holding) == set()
+
+
+# --- triage ----------------------------------------------------------------
+
+def test_triage_weights_sum_to_100():
+    from engine.analyzers.triage import load_config
+    assert sum(load_config()["weights"].values()) == 100
+
+
+def test_triage_ranks_every_client_with_holdings(ds):
+    from engine.analyzers.triage import rank_book
+    assert len(rank_book(ds)) == 20
+
+
+def test_triage_is_ordered_by_score(ds):
+    from engine.analyzers.triage import rank_book
+    scores = [s.total for s in rank_book(ds)]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_triage_surfaces_the_tightest_facility_in_the_book(ds):
+    """CL-0014 sits 0.59pp from its trigger and no deep analyzer looked at it."""
+    from engine.analyzers.triage import rank_book
+    top_three = [s.client_id for s in rank_book(ds)[:3]]
+    assert "CL-0014" in top_three

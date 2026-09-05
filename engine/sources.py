@@ -6,7 +6,9 @@ rather than asking them to take the fact's word for it.
 
 Row-ref conventions, one per file:
     holdings.csv           portfolio_id|instrument_id|snapshot_date
+    mandates.csv           mandate_code|asset_class
     instruments.csv        instrument_id
+    transactions.csv       transaction_id
     portfolios.csv         portfolio_id
     clients.csv            client_id
     credit_facilities.csv  facility_id
@@ -28,6 +30,8 @@ _KEYS: dict[str, tuple[str, ...]] = {
     "portfolios.csv": ("portfolio_id",),
     "clients.csv": ("client_id",),
     "credit_facilities.csv": ("facility_id",),
+    "mandates.csv": ("mandate_code", "asset_class"),
+    "transactions.csv": ("transaction_id",),
     "commitments.csv": ("commitment_id",),
     "planned_cash_needs.csv": ("need_id",),
     "event_log.csv": ("event_date",),
@@ -40,6 +44,8 @@ _FRAMES = {
     "portfolios.csv": "portfolios",
     "clients.csv": "clients",
     "credit_facilities.csv": "credit_facilities",
+    "mandates.csv": "mandates",
+    "transactions.csv": "transactions",
     "commitments.csv": "commitments",
     "planned_cash_needs.csv": "planned_cash_needs",
     "event_log.csv": "event_log",

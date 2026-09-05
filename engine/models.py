@@ -29,6 +29,7 @@ FactKind = Literal[
     "collateral",
     "liquidity",
     "tension",
+    "triage",
     "scenario",
 ]
 
@@ -46,13 +47,27 @@ class NumberNotSourced(ValueError):
     """A rendered number has no counterpart in `numbers`. Invariant 2 failed."""
 
 
-def claimed_numbers(text: str) -> list[tuple[str, float, int]]:
+def claimed_numbers(
+    text: str, quotes: tuple[str, ...] = ()
+) -> list[tuple[str, float, int]]:
     """Every numeral a reader would take as a factual claim.
 
-    Returns (as_written, value, decimals_as_written). Identifiers and ISO dates
-    are removed first so they are not treated as claims.
+    Returns (as_written, value, decimals_as_written). Removed first, because
+    none of them is an authored claim:
+      - identifiers ("CL-0002", "SYN-SP-0505", "N-004")
+      - ISO dates ("2026-06-30")
+      - verbatim quotations of source text, declared in `quotes`
+
+    That last exemption exists because source fields legitimately contain
+    numerals - an instrument is *named* "Fixed Coupon Note ref. Basket C,
+    9.20% p.a., 12M", and an objective *says* "a property purchase in 2027".
+    Reproducing them is quotation, not assertion, and the row they came from
+    is cited anyway. Anything outside a declared quote is still a claim.
     """
-    scrubbed = _IDENTIFIER.sub(" ", _ISO_DATE.sub(" ", text))
+    scrubbed = text
+    for quote in quotes:
+        scrubbed = scrubbed.replace(quote, " ")
+    scrubbed = _IDENTIFIER.sub(" ", _ISO_DATE.sub(" ", scrubbed))
     found: list[tuple[str, float, int]] = []
     for match in _NUMERAL.finditer(scrubbed):
         written = match.group(0)
@@ -97,6 +112,9 @@ class Fact(BaseModel):
     headline: str = Field(min_length=1)
     detail: str = ""
     numbers: dict[str, float] = Field(default_factory=dict)
+    # Verbatim strings copied out of a cited source row. Exempt from the
+    # numeral check, and each must actually appear in the rendered text.
+    quotes: tuple[str, ...] = ()
     # INVARIANT 1: a fact with no source cannot be constructed.
     sources: tuple[Source, ...] = Field(min_length=1)
     as_of: str
@@ -116,7 +134,7 @@ class Fact(BaseModel):
         allowed = list(self.numbers.values())
         for field_name in ("headline", "detail"):
             text = getattr(self, field_name)
-            for written, value, decimals in claimed_numbers(text):
+            for written, value, decimals in claimed_numbers(text, self.quotes):
                 if not _is_supported(value, decimals, allowed):
                     raise NumberNotSourced(
                         f"{self.fact_id}: {field_name} claims {written!r} but no "
@@ -136,6 +154,18 @@ class Fact(BaseModel):
                 f"{self.fact_id}: kind='scenario' requires confidence='scenario', "
                 f"got {self.confidence!r}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _quotes_are_actually_quoted(self) -> "Fact":
+        """A declared quote that appears nowhere is a hole in the check."""
+        rendered = f"{self.headline} {self.detail}"
+        for quote in self.quotes:
+            if quote not in rendered:
+                raise ValueError(
+                    f"{self.fact_id}: declared quote {quote!r} does not appear in "
+                    f"the rendered text, so it exempts nothing"
+                )
         return self
 
     @property

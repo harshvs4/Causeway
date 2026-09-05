@@ -107,9 +107,16 @@ def _holding_source(row: pd.Series, *, fields: tuple[str, ...]) -> Source:
 
 
 def exposures_by_portfolio(
-    dataset: Dataset, client_id: str, snapshot: str = LATEST_SNAPSHOT
+    dataset: Dataset,
+    client_id: str,
+    snapshot: str = LATEST_SNAPSHOT,
+    value_column: str = "market_value_base",
 ) -> dict[str, dict[str, Exposure]]:
-    """{portfolio_id: {normalised_name: Exposure}} for one client at one date."""
+    """{portfolio_id: {normalised_name: Exposure}} for one client at one date.
+
+    Pass value_column="market_value_usd" to aggregate across portfolios whose
+    base currencies differ - adding SGD to USD would otherwise be meaningless.
+    """
     instruments = dataset.instruments.set_index("instrument_id")
     holdings = dataset.holdings_at(snapshot)
     holdings = holdings[holdings["client_id"] == client_id]
@@ -119,7 +126,7 @@ def exposures_by_portfolio(
         portfolio = row["portfolio_id"]
         bucket = result.setdefault(portfolio, {})
         instrument = instruments.loc[row["instrument_id"]]
-        value = float(row["market_value_base"])
+        value = float(row[value_column])
 
         # The instrument itself, when it is a single name.
         if str(instrument.get("concentration_limit_applies", "N")).upper() == "Y":
@@ -143,6 +150,34 @@ def exposures_by_portfolio(
     return result
 
 
+def exposures_for_client(
+    dataset: Dataset, client_id: str, snapshot: str = LATEST_SNAPSHOT
+) -> dict[str, Exposure]:
+    """One name's exposure across every portfolio the client holds, in USD.
+
+    This is the number that matters for a name that appears in more than one
+    account: a per-portfolio view splits it and each half looks tolerable.
+    """
+    per_portfolio = exposures_by_portfolio(
+        dataset, client_id, snapshot, value_column="market_value_usd"
+    )
+    merged: dict[str, Exposure] = {}
+    for bucket in per_portfolio.values():
+        for key, exposure in bucket.items():
+            target = merged.setdefault(key, Exposure(display_name=exposure.display_name))
+            target.direct_base += exposure.direct_base
+            target.indirect_base += exposure.indirect_base
+            target.direct_rows.extend(exposure.direct_rows)
+            target.indirect_rows.extend(exposure.indirect_rows)
+    return merged
+
+
+def client_book_usd(dataset: Dataset, client_id: str,
+                    snapshot: str = LATEST_SNAPSHOT) -> float:
+    holdings = dataset.holdings_at(snapshot)
+    return float(holdings[holdings["client_id"] == client_id]["market_value_usd"].sum())
+
+
 def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fact]:
     facts: list[Fact] = []
     portfolios = dataset.portfolios.set_index("portfolio_id")
@@ -150,6 +185,55 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
     holdings = dataset.holdings_at(LATEST_SNAPSHOT)
 
     for client_id in client_ids:
+        # --- book level: one name across every account the client holds -----
+        book_usd = client_book_usd(dataset, client_id)
+        for exposure in sorted(
+            exposures_for_client(dataset, client_id).values(),
+            key=lambda e: -e.total_base,
+        )[:1]:
+            book_pct = exposure.total_base / book_usd * 100
+            if book_pct < 25:
+                continue
+            direct_pct = exposure.direct_base / book_usd * 100
+            indirect_pct = exposure.indirect_base / book_usd * 100
+            accounts = sorted({s.row_ref.split("|")[0] for s in
+                               exposure.direct_rows + exposure.indirect_rows})
+            via = (
+                f" — {direct_pct:.2f}% held directly and {indirect_pct:.2f}% "
+                f"reached through a wrapper"
+                if exposure.indirect_base > 0
+                else ""
+            )
+            facts.append(
+                Fact(
+                    fact_id=f"F-{client_id.replace('-', '')}-BOOKEXPOSURE",
+                    client_id=client_id,
+                    kind="lookthrough",
+                    headline=(
+                        f"{exposure.display_name} is {book_pct:.2f}% of the client's "
+                        f"entire book{via}."
+                    ),
+                    detail=(
+                        f"Measured across {len(accounts)} account(s) "
+                        f"({', '.join(accounts)}) in USD, because a per-portfolio view "
+                        f"splits the name and each half looks tolerable. "
+                        f"{exposure.total_base:,.0f} of {book_usd:,.0f}."
+                    ),
+                    numbers={
+                        "book_pct": book_pct,
+                        "direct_pct": direct_pct,
+                        "indirect_pct": indirect_pct,
+                        "exposure_usd": exposure.total_base,
+                        "book_usd": book_usd,
+                        "accounts": float(len(accounts)),
+                    },
+                    sources=tuple(exposure.direct_rows + exposure.indirect_rows),
+                    as_of=LATEST_SNAPSHOT,
+                    confidence="derived",
+                    severity=min(100, int(book_pct + 30)),
+                )
+            )
+
         by_portfolio = exposures_by_portfolio(dataset, client_id)
         for portfolio_id, exposures in sorted(by_portfolio.items()):
             portfolio_rows = holdings[holdings["portfolio_id"] == portfolio_id]

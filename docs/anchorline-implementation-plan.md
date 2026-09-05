@@ -181,7 +181,10 @@ Two parsing requirements, both found by inspecting the actual `underlying_refere
 |---|---|---|
 | 1 | **CL-0002 Ravi Chandrasekaran** | Alone satisfies all five "what working looks like" criteria: 24.64% look-through concentration in the pledged portfolio, a real 75.64% breach he caused himself after being warned, and a documented objection ("won't sell listed tech before the Q4 secondary", N-003) that makes a genuinely hard Rehearse. **This is the demo client.** |
 | 2 | **CL-0001 Hartono Wijaya Kusuma** | 44.99% true exposure to his own family's company — including through a note sitting in the account he said was for everything *except* the mine. Plus an event-cured breach and a 2027 SGD 9m liquidity need. **The single sharpest insight in the dataset.** |
-| 3 | **CL-0017 Fong Family Office** | Three portfolios, USD 15.8m uncalled. Only if hours 29–31 are clear. |
+| 3 | **CL-0014 Lau Chi Ming** *(candidate — not built)* | Surfaced by the book-level triage scan rather than by us: the **tightest facility in the entire book, 0.59pp from its margin-call trigger** — tighter than CL-0002's 1.29pp — plus a property developer whose largest holding is direct property. A stronger "the system found this, we weren't looking for it" moment than CL-0017. |
+| — | **CL-0017 Fong Family Office** | Three portfolios, USD 15.8m uncalled. Now the fallback rather than the third client. |
+
+Only one of these gets built, and only if hours 29–31 are genuinely clear.
 
 Note that the demo client and the sharpest-insight client are *different people* — which is useful. CL-0002 carries the Rehearse and Assist story; CL-0001 carries the "you could not possibly have seen this" moment. Two clients, two different kinds of proof.
 
