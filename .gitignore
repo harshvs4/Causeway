@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Anchorline generated artefacts (rebuilt by `make build` / `make vault`)
+vault/

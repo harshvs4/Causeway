@@ -1,0 +1,27 @@
+[project]
+name = "anchorline"
+version = "0.1.0"
+description = "AI wealth-intelligence layer for relationship managers. SingHacks 2026, Julius Baer track."
+readme = "README.md"
+# Pinned below 3.14: pandas wheels are not reliably published for 3.14 yet, and
+# the local default interpreter is 3.14.0. uv will fetch a suitable runtime.
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pandas>=2.2",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Explicit: auto-discovery fails because data/, docs/ and tests/ sit at the root.
+[tool.setuptools.packages.find]
+include = ["engine*"]
