@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault console console-data serve test clean all
+.PHONY: setup build vault console console-data mcp serve test clean all
 
 setup:
 	uv venv --python 3.12
@@ -12,6 +12,9 @@ build:
 
 vault: build
 	$(PY) vault_build.py
+
+mcp:
+	$(PY) -m mcp_server.server
 
 console-data: build
 	mkdir -p console/public
