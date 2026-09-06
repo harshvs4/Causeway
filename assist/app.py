@@ -27,9 +27,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from engine.loader import BUILD_DIR
+from engine.loader import BUILD_DIR, REPO_ROOT
 from engine.retrieval import FactIndex
 
 # A cue must clear this to be worth interrupting a conversation for. Kept low
@@ -101,7 +102,10 @@ async def lifespan(_app: "FastAPI"):
 app = FastAPI(title="Anchorline Assist", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", "http://127.0.0.1:5173",   # vite, when running
+        "http://localhost:8765", "http://127.0.0.1:8765",   # served from here
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -397,6 +401,16 @@ async def assist(websocket: WebSocket, client_id: str = "CL-0002") -> None:
         pass
     finally:
         session.sockets.discard(websocket)
+
+
+# The built console is served from this process rather than a second one.
+# On a memory-constrained machine every extra server is something the OS can
+# reap mid-demo, and this also makes the console same-origin with the API it
+# talks to, which removes CORS from the picture entirely. Mounted last so every
+# API route above still takes precedence over the static files.
+_CONSOLE_DIST = REPO_ROOT / "console" / "dist"
+if _CONSOLE_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=_CONSOLE_DIST, html=True), name="console")
 
 
 def main() -> None:

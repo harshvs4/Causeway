@@ -12,8 +12,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * fallback: a noisy demo room should not be the reason this looks broken.
  */
 
-const ASSIST_HTTP = "http://127.0.0.1:8765";
-const ASSIST_WS = "ws://127.0.0.1:8765/assist";
+// Relative to wherever this page is served from. The console is served by the
+// assist process itself, so these resolve same-origin and keep working whether
+// the browser is on localhost or 127.0.0.1 - a hardcoded host breaks on one of
+// the two, and CORS then fails in a way that looks like the service is down.
+const ASSIST_HTTP = "";
+const ASSIST_WS = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/assist`;
 
 type Cue = {
   fact_id: string;
