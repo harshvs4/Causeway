@@ -29,3 +29,26 @@ directly, at any point. This is a hard constraint, not a preference.
 Dataset lives in `data/` — see docs/DATA_DICTIONARY.md for fields.
 event_log.csv is authoritative for anything that happened in 2026 — never the model's
 own knowledge of world events.
+
+## Git workflow — never work on main
+
+Every feature, enhancement, and bug fix happens on its own branch. This is standing
+authorization: branch and push without asking each time.
+
+1. **Before touching code, check the branch.** `git branch --show-current`. If it says
+   `main`, stop and branch first — do not edit, do not commit.
+2. **Branch per unit of work**, named for what it does:
+   `feat/<slug>` · `fix/<slug>` · `chore/<slug>` · `docs/<slug>`
+   (the repo already uses `merge/<slug>` for integration branches — keep that for merges
+   of someone else's work).
+3. **Push the branch to `origin`** (https://github.com/harshvs4/Causeway.git) once there
+   is something worth pushing. Push early; don't sit on local-only commits.
+4. **Merge to `main` only when it actually works** — `make build` succeeds and `make test`
+   is fully green. A failing or skipped test is not "working fine"; say so rather than
+   merging past it.
+5. **Never force-push `main`**, and never rewrite history on a branch that has been pushed
+   and shared.
+
+If work has already begun on `main` by mistake, move it to a branch before committing
+(`git switch -c <branch>` carries uncommitted changes across) rather than committing to
+`main` and fixing it afterwards.
