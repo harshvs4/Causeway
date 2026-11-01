@@ -220,5 +220,8 @@ __marimo__/
 # Anchorline generated artefacts (rebuilt by `make build` / `make vault`)
 vault/
 console/public/facts.json
+# Generated personas. The hand-written CL-0002_rehearse.md stays tracked; these
+# are rebuilt by `make personas`, so a clone carries the generator not its output.
+mcp_server/personas/generated/
 
 .DS_Store

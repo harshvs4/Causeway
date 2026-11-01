@@ -143,9 +143,10 @@ make setup       # uv venv (Python 3.12) + dependencies
 make build       # analyzers → build/facts.json   (snapshot, reproducible)
 make refresh     # today's market → re-marked book → rebuild
 make refresh-dry # fetch and report quotes, change nothing
-make test        # 243 tests
+make test        # 262 tests
 
 make vault       # → vault/ ; open the folder as an Obsidian vault
+make personas    # a rehearsal persona per client, from verbatim notes
 make console     # → localhost:5173
 make assist      # → localhost:8765   live cue service
 make mcp         # → localhost:8848   MCP server for the voice layer
@@ -161,6 +162,21 @@ to the agent node — `list_clients` is deliberately excluded, since a rehearsal
 agent has no business enumerating other clients — and use
 `mcp_server/personas/CL-0002_rehearse.md` as the prompt.
 
+**Any client can be rehearsed against, not only the two.** `make personas`
+writes one per client into `mcp_server/personas/generated/`, built from that
+client's verbatim notes with the `note_id` printed beside each position — a
+paraphrase of what a client said is no longer what they said, so nothing is
+paraphrased. A persona carries no portfolio figure at all: it names the
+`fact_id` of each thing the client cannot answer and tells the agent to look the
+number up, because a figure sitting in a prompt is one the agent will say out
+loud without ever calling a tool. A test asserts that every numeral in every
+persona came from a quoted note or the client's own record.
+
+The hand-written `CL-0002_rehearse.md` stays, and is not overwritten. It reads
+Ravi's notes and says what kind of man makes those decisions, which a generator
+cannot do — treating the generated article as its equal would be the overclaim
+this project avoids everywhere else.
+
 ---
 
 ## Where this stands
@@ -171,7 +187,8 @@ agent has no business enumerating other clients — and use
 | Live | 20 of 23 real series quotable keylessly · 35 published sensitivity rules |
 | Clients | **all 20 analysed** by every analyzer; 2 carry a rehearsal persona and hand-recomputed goldens |
 | Vault | 741 notes — 203 Verified, 39 Scenario, 478 Sources, 20 Clients |
-| Tests | **243 passing** |
+| Rehearse | 1 hand-written persona · **20 generated**, every position cited to a note_id |
+| Tests | **262 passing** |
 
 Breadth is not the opposite of depth here. The analyzers are deterministic
 pandas, so running them across the whole book costs a `groupby` and hides
