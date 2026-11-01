@@ -16,6 +16,7 @@ from engine.analyzers import (
     attribution,
     collateral,
     liquidity,
+    live_mark,
     lookthrough,
     mandate,
     scenario,
@@ -99,15 +100,54 @@ def collect(dataset: Dataset, client_ids: tuple[str, ...] | None = None) -> list
     return facts
 
 
-def source_rows(dataset: Dataset, facts: list[Fact]) -> dict[str, dict]:
-    """Every row any fact cites, resolved once."""
+def source_rows(
+    dataset: Dataset,
+    facts: list[Fact],
+    extra: dict[str, dict] | None = None,
+) -> dict[str, dict]:
+    """Every row any fact cites, resolved once.
+
+    `extra` holds origins that are not rows in data/ - a live quote, a
+    sensitivity rule - already rendered as rows. They resolve through the same
+    call, so nothing downstream needs to know which kind it is looking at.
+    """
     rows: dict[str, dict] = {}
     for fact in facts:
         for source in fact.sources:
             key = source_key(source.file, source.row_ref)
             if key not in rows:
-                rows[key] = resolve(dataset, source.file, source.row_ref)
+                rows[key] = resolve(dataset, source.file, source.row_ref, extra)
     return rows
+
+
+def live_facts(
+    dataset: Dataset, clients: tuple[str, ...]
+) -> tuple[list[Fact], dict[str, dict]]:
+    """Facts marked against today's market, and the quote rows behind them.
+
+    Returns nothing at all unless a live price source was explicitly asked for.
+    That default is load-bearing: `make build` has to stay reproducible, and the
+    goldens in tests/ are pinned to four decimals. A build that quietly reached
+    for the network would make 24.6400% a function of this morning's tape.
+    """
+    from engine.live_feed import SOURCE_ENV, fetch_all, quote_source
+    from engine.marks import derive_marks
+
+    if (os.environ.get(SOURCE_ENV) or "snapshot").strip().lower() == "snapshot":
+        return [], {}
+
+    source = quote_source()
+    quotes = fetch_all(source)
+    marks = derive_marks(dataset, quotes)
+    live = sum(1 for quote in quotes.values() if quote.live)
+    moved = sum(1 for mark in marks.values() if mark.moved)
+    print(
+        f"  {'live_mark':<14} quotes: {live}/{len(quotes)} live, "
+        f"{moved}/{len(marks)} instruments re-marked"
+    )
+    produced = list(live_mark.run(dataset, clients, quotes, marks))
+    print(f"  {'live_mark':<14} {len(produced):>4} facts")
+    return produced, live_mark.extra_source_rows(quotes, marks)
 
 
 def build() -> dict:
@@ -119,13 +159,18 @@ def build() -> dict:
     )
     facts = collect(dataset, clients)
 
+    # Marked against today's market, when asked for. Appended rather than merged
+    # into collect(), so the snapshot path above stays exactly what it was.
+    marked, extra = live_facts(dataset, clients)
+    facts.extend(marked)
+
     # Re-validate on the way out. Facts are validated at construction, but this
     # guarantees anything reaching disk survives a round trip through the model.
     payload = [fact.model_dump(mode="json") for fact in facts]
     for raw in payload:
         Fact.model_validate(raw)
 
-    rows = source_rows(dataset, facts)
+    rows = source_rows(dataset, facts, extra)
 
     # Quotes exempt their numerals from the claim check, so each one is matched
     # against the real field values of the rows its fact cites. Internal

@@ -1,0 +1,376 @@
+# How a real market move reaches a synthetic instrument.
+#
+# A live quote tells you what the NASDAQ did. It does not tell you what "US
+# Technology Leaders Fund" did, because that fund does not exist. This file is
+# the bridge, and it is hand-written and version-controlled for the same reason
+# the triage weights are: the derivation has to be arguable. A reviewer who
+# thinks the technology beta should be 1.00 rather than 1.15 can see the number,
+# see the reasoning, change it, and re-run.
+#
+# WHAT THIS PRODUCES IS A MARK, NOT A PRICE. Nothing here observes a trade in a
+# synthetic instrument. Every value derived through this file is labelled a
+# derived mark, cites both the live quote and the rule applied, and names the
+# beta it used. It is an estimate with its workings attached, which is the only
+# honest form an estimate can take in this product.
+#
+# Rules are matched MOST SPECIFIC FIRST, top to bottom. "*" matches anything.
+# The first rule whose every stated field matches wins, and the rule's own id is
+# recorded on the mark so the match can be checked.
+#
+# modes
+#   relative   price_pct = factor_pct_change * beta
+#              For anything quoted as a level: equities, commodities, ETFs.
+#              The factor's percentage move is the thing being scaled.
+#
+#   duration   price_pct = -duration_years * factor_change_in_points
+#              For bonds. A yield series moving from 4.986 to 4.929 is a change
+#              of -0.057 POINTS, not -1.14 percent, and a bond's price responds
+#              to the former. Using the relative change here would be a sign
+#              error dressed up as a small number.
+#
+#   none       price_pct = 0
+#              Stated explicitly rather than by omission, so "this does not
+#              reprice" is a decision on the record rather than a gap.
+#
+# DURATION IS AN ASSUMPTION, NOT DATA. instruments.csv carries no duration,
+# maturity or coupon field, so each figure below is a stated assumption about a
+# sub_asset_class, in the same spirit as the assumed Brent levels in
+# engine/scenario.py. They are conventional mid-points for their category and
+# are deliberately round, because a precise-looking assumed duration would imply
+# a precision the dataset cannot support.
+
+defaults:
+  # Applied when no rule matches at all. Zero, not a guess: an unmatched
+  # instrument holds its last mark and the fact says the rule did not match.
+  mode: none
+  beta: 0.0
+  why: >-
+    No sensitivity rule matched this instrument's asset class, sector and
+    region, so it holds its last snapshot mark rather than being moved by a
+    factor chosen for it after the fact.
+
+rules:
+  # ======================= EQUITY ==========================================
+  # Sector-and-region rules first; each names the index whose constituents most
+  # resemble the holding.
+
+  - id: equity.tech.north_america
+    match: {asset_class: Equity, sector: Information Technology, region: North America}
+    mode: relative
+    factor: NASDAQ_COMP
+    beta: 1.15
+    why: >-
+      US technology sits in the NASDAQ Composite, and a concentrated technology
+      fund is conventionally more volatile than the index containing it. 1.15 is
+      a deliberately modest premium - high enough to matter, low enough that the
+      mark does not become mostly an artefact of the beta.
+
+  - id: equity.energy
+    match: {asset_class: Equity, sector: Energy, region: "*"}
+    mode: relative
+    factor: BRENT_USD_BBL
+    beta: 0.45
+    why: >-
+      Energy equity follows the crude price but is damped by it: producers hedge,
+      carry debt, and earn refining and distribution margins that do not move
+      one-for-one with the barrel. Well below 1.0 for that reason.
+
+  - id: equity.real_estate.hong_kong
+    match: {asset_class: Equity, sector: Real Estate, region: Hong Kong}
+    mode: relative
+    factor: HSI
+    beta: 1.20
+    why: >-
+      Hong Kong property developers are Hang Seng constituents and among its
+      higher-beta members, being leveraged and rate-sensitive.
+
+  - id: equity.real_estate.singapore
+    match: {asset_class: Equity, sector: Real Estate, region: Singapore}
+    mode: relative
+    factor: STI
+    beta: 1.10
+    why: Singapore property and REITs are Straits Times Index constituents.
+
+  - id: equity.greater_china
+    match: {asset_class: Equity, sector: "*", region: Greater China}
+    mode: relative
+    factor: HSI
+    beta: 1.00
+    why: The Hang Seng is the most liquid proxy for Greater China equity beta.
+
+  - id: equity.hong_kong
+    match: {asset_class: Equity, sector: "*", region: Hong Kong}
+    mode: relative
+    factor: HSI
+    beta: 1.00
+    why: Direct Hang Seng membership.
+
+  - id: equity.singapore
+    match: {asset_class: Equity, sector: "*", region: Singapore}
+    mode: relative
+    factor: STI
+    beta: 1.00
+    why: Direct Straits Times Index membership.
+
+  - id: equity.asia_ex_japan
+    match: {asset_class: Equity, sector: "*", region: Asia ex-Japan}
+    mode: relative
+    factor: MSCI_ASIA_XJP
+    beta: 1.00
+    why: The series is the index for exactly this universe.
+
+  - id: equity.southeast_asia
+    match: {asset_class: Equity, sector: "*", region: Southeast Asia}
+    mode: relative
+    factor: MSCI_ASIA_XJP
+    beta: 1.05
+    why: >-
+      Southeast Asia sits inside Asia ex-Japan but is the smaller, less liquid
+      end of it, so slightly above the index.
+
+  - id: equity.south_asia
+    match: {asset_class: Equity, sector: "*", region: South Asia}
+    mode: relative
+    factor: MSCI_ASIA_XJP
+    beta: 1.10
+    why: >-
+      India dominates South Asia and is an Asia ex-Japan constituent, with
+      higher realised volatility than the index.
+
+  - id: equity.indonesia
+    match: {asset_class: Equity, sector: "*", region: Indonesia}
+    mode: relative
+    factor: MSCI_ASIA_XJP
+    beta: 1.15
+    why: >-
+      Indonesian equity is an Asia ex-Japan constituent at the higher-volatility
+      end. The rupiah leg is handled by the FX conversion in engine/loader.py
+      rather than folded into this beta.
+
+  - id: equity.asia_pacific
+    match: {asset_class: Equity, sector: "*", region: Asia Pacific}
+    mode: relative
+    factor: MSCI_ASIA_XJP
+    beta: 1.00
+    why: Closest available regional index.
+
+  - id: equity.japan
+    match: {asset_class: Equity, sector: "*", region: Japan}
+    mode: relative
+    factor: MSCI_ASIA_XJP
+    beta: 0.85
+    why: >-
+      Japan is excluded from the Asia ex-Japan index, so this is a genuine
+      stand-in rather than a membership claim. Damped because Japanese equity
+      has historically been the less volatile large Asian market, and because
+      this link is weaker than any other rule here. The right fix is a Japanese
+      index in market_context.csv, not a more confident beta.
+
+  - id: equity.north_america
+    match: {asset_class: Equity, sector: "*", region: North America}
+    mode: relative
+    factor: SPX
+    beta: 1.00
+    why: Direct S&P 500 membership.
+
+  - id: equity.any
+    match: {asset_class: Equity, sector: "*", region: "*"}
+    mode: relative
+    factor: SPX
+    beta: 0.90
+    why: >-
+      Global and European equity, caught by the broadest rule. The S&P is the
+      world's dominant equity factor; below 1.0 because a globally diversified
+      holding is less volatile than the US index alone.
+
+  # ======================= COMMODITIES =====================================
+  - id: commodity.gold
+    match: {asset_class: Commodities, sector: Gold, region: "*"}
+    mode: relative
+    factor: GOLD_USD_OZ
+    beta: 1.00
+    why: The holding is gold and the series is the gold price.
+
+  - id: commodity.any
+    match: {asset_class: Commodities, sector: "*", region: "*"}
+    mode: relative
+    factor: BRENT_USD_BBL
+    beta: 0.60
+    why: >-
+      A diversified commodity basket is typically a third to a half energy by
+      weight, so it carries much of crude's move without being crude.
+
+  # ======================= FIXED INCOME ====================================
+  # Duration mode throughout. See the header: these durations are stated
+  # assumptions about a category, not measurements of an instrument.
+  - id: fi.short_duration
+    match: {asset_class: Fixed Income, sub_asset_class: Short Duration, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 2.0
+    why: >-
+      Short duration funds conventionally run one to three years; two is the
+      mid-point. The ten-year yield is an imperfect driver for the front end,
+      which is a further reason to keep the duration small.
+
+  - id: fi.government
+    match: {asset_class: Fixed Income, sub_asset_class: Government Bond, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 7.0
+    why: >-
+      A conventional government bond fund sits near the middle of the curve.
+      Seven years is the usual neighbourhood for a broad sovereign index.
+
+  - id: fi.inflation_linked
+    match: {asset_class: Fixed Income, sub_asset_class: Inflation Linked, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 6.0
+    why: >-
+      Linkers carry real-rate rather than nominal-rate duration, so the nominal
+      ten-year overstates their sensitivity. Held below the government bond
+      figure to reflect that, which is an approximation and recorded as one.
+
+  - id: fi.investment_grade
+    match: {asset_class: Fixed Income, sub_asset_class: Investment Grade Credit, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 6.0
+    why: >-
+      Investment grade credit indices typically run six to seven years. The
+      spread component is not modelled here at all, so this captures the rates
+      leg only - which is stated on every mark it produces.
+
+  - id: fi.high_yield
+    match: {asset_class: Fixed Income, sub_asset_class: High Yield Credit, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 3.5
+    why: >-
+      High yield is shorter and far more spread-driven than rate-driven. A low
+      duration is the honest answer here: most of what moves high yield is not
+      in this file.
+
+  - id: fi.emerging_market
+    match: {asset_class: Fixed Income, sub_asset_class: Emerging Market Debt, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 6.5
+    why: >-
+      Hard-currency EM sovereign indices run near seven years and are genuinely
+      US-rate sensitive. The sovereign spread is not modelled.
+
+  - id: fi.perpetual
+    match: {asset_class: Fixed Income, sub_asset_class: Subordinated Perpetual, region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 5.0
+    why: >-
+      A perpetual has no maturity, so its duration is set by the call it is
+      priced to rather than by a redemption date. Five years stands for "priced
+      to the next call", and is the roughest assumption in this file.
+
+  - id: fi.any
+    match: {asset_class: Fixed Income, sub_asset_class: "*", region: "*"}
+    mode: duration
+    factor: UST_10Y_PCT
+    duration_years: 5.0
+    why: Unclassified fixed income, held to a middling duration.
+
+  # ======================= STRUCTURED PRODUCTS =============================
+  # A note's sector and region are those of its underlying, which is why these
+  # mirror the equity rules. Participation in the underlying is partial by
+  # construction - that is what the wrapper is for - so every beta here is
+  # damped relative to holding the underlying outright.
+  - id: structured.tech.north_america
+    match: {asset_class: Structured Products, sector: Information Technology, region: North America}
+    mode: relative
+    factor: NASDAQ_COMP
+    beta: 0.70
+    why: >-
+      An equity-linked note on a US technology name tracks the NASDAQ, but
+      capital protection, caps and coupon floors damp the participation. 0.70
+      represents partial participation and is the most consequential assumption
+      in this file for CL-0002, whose pledged portfolio holds one.
+
+  - id: structured.gold
+    match: {asset_class: Structured Products, sector: Gold, region: "*"}
+    mode: relative
+    factor: GOLD_USD_OZ
+    beta: 0.70
+    why: Gold-linked note, damped for the same structural reason.
+
+  - id: structured.real_estate.hong_kong
+    match: {asset_class: Structured Products, sector: Real Estate, region: Hong Kong}
+    mode: relative
+    factor: HSI
+    beta: 0.80
+    why: >-
+      An accumulator on a Hong Kong property name. Accumulators participate more
+      fully than capital-protected notes, hence above the others here.
+
+  - id: structured.any
+    match: {asset_class: Structured Products, sector: "*", region: "*"}
+    mode: relative
+    factor: SPX
+    beta: 0.60
+    why: >-
+      Multi-asset and basket notes, where the underlying is mixed and the
+      wrapper damps participation. The broadest equity factor at low
+      participation.
+
+  # ======================= ALTERNATIVES ====================================
+  - id: alternative.real_estate
+    match: {asset_class: Alternatives, sector: Real Estate, region: "*"}
+    mode: none
+    beta: 0.0
+    why: >-
+      Direct property is appraisal-valued, not marked against a traded index. It
+      does not reprice because the Hang Seng moved this afternoon, and
+      pretending otherwise would put a daily mark on the least liquid thing in
+      the book. It holds its last valuation, and the fact says so.
+
+  - id: alternative.macro
+    match: {asset_class: Alternatives, sector: Macro, region: "*"}
+    mode: none
+    beta: 0.0
+    why: >-
+      A macro fund's whole purpose is a return uncorrelated with equity beta.
+      Attaching it to an index would assert the opposite of what the strategy
+      claims.
+
+  - id: alternative.equity_long_short
+    match: {asset_class: Alternatives, sector: Equity Long Short, region: "*"}
+    mode: relative
+    factor: SPX
+    beta: 0.40
+    why: >-
+      Long-short equity runs net long but hedged. A low net beta is the point of
+      the strategy.
+
+  - id: alternative.infrastructure
+    match: {asset_class: Alternatives, sector: Infrastructure, region: "*"}
+    mode: none
+    beta: 0.0
+    why: >-
+      Unlisted infrastructure is valued on a periodic cycle, not daily. Same
+      reasoning as direct property.
+
+  - id: alternative.any
+    match: {asset_class: Alternatives, sector: "*", region: "*"}
+    mode: none
+    beta: 0.0
+    why: >-
+      Private equity, venture and corporate direct holdings are carried at the
+      last priced round or an appraisal. A daily mark would be fabricated.
+
+  # ======================= CASH ============================================
+  - id: cash
+    match: {asset_class: Cash and Equivalents, sector: "*", region: "*"}
+    mode: none
+    beta: 0.0
+    why: >-
+      A deposit does not reprice with an equity index. Its currency does move
+      against the book's base, and that is handled by the FX conversion in
+      engine/loader.py rather than by a sensitivity here.

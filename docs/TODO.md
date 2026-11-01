@@ -17,7 +17,21 @@ Do task 0 before 2 and 5 — they're worth more once it's true.
 
 ## P0 — before anything else
 
-### 0. [ ] Extend engine depth beyond the 2 hand-picked clients
+### 0. [x] Extend engine depth beyond the 2 hand-picked clients
+
+**Done** — merged to `main`. All 20 clients go through all 8 analyzers: 241
+facts (was 40), 463 source rows, 353 verified quotes, 741 vault notes.
+`DEEP_CLIENTS` marks the two carrying a persona and hand-recomputed goldens, so
+breadth never implies the other eighteen were studied as closely.
+`ANCHORLINE_CLIENTS` narrows the build for a demo.
+
+Flipping the constant was the easy part. Four defects only existed at scale:
+duplicate `LOOKTHRU` fact_ids (a worst-of basket puts three qualifying names in
+one portfolio); Invariant 2 firing on a bond *named* `"... 2.375% 2031"`; two
+checkers in `engine/grounding.py` being stricter than the `Fact` contract they
+exist to check, because they had no notion of quotes; and `vault_build.py`
+claiming the client page cited `clients.csv` when it cited only portfolios —
+twelve orphaned notes, and a page stating objectives with no link to their row.
 
 **Why:** `CLIENTS: tuple[str, ...] = ("CL-0002", "CL-0001")` is hardcoded at
 `engine/build.py:31`. Every analyzer except `triage.py` only ever produces
@@ -51,7 +65,56 @@ once you count verifying every new client's numbers and fixing any
 
 ---
 
-### 1. [ ] Run the engine on live, refreshable market data
+### 1. [x] Run the engine on live, refreshable market data
+
+**Done** on `feat/live-market-data`. `make refresh` pulls today's market,
+re-marks the book and rebuilds; `make build` stays on the snapshot so its
+goldens remain exact. 243 tests, none of which touch the network.
+
+**The task as written was not buildable, and the reason matters.** It said to
+fetch prices "for the tickers referenced in `instruments.csv`". Those
+instruments are fictional — "Helios Cloud Systems Inc" has no ticker and never
+will, and inventing a quote for it is the exact thing this codebase refuses.
+What *is* real is the 23 series in `market_context.csv`: SPX, NASDAQ, HSI, STI,
+VIX, Brent, gold, TTF, the 10-year, and nine FX pairs. So the live feed
+refreshes those, and instrument prices are **derived** from the observed factor
+move through a published sensitivity map — the scenario engine's mechanism,
+driven by real change instead of a hypothesis.
+
+Shipped:
+- `engine/live_feed.py` — keyless quotes (Yahoo for indices/commodities/yield,
+  ECB via Frankfurter for FX, which is the one exact leg). Injected source;
+  `SnapshotQuotes` is the default.
+- `engine/config/market_feed.yaml` — series → symbol, every proxy carrying its
+  reasoning, and three series declared as honest gaps with why.
+- `engine/config/market_sensitivities.yaml` — 35 hand-authored rules, each with
+  its reasoning. Two modes: `relative` for levels, `duration` for yields.
+- `engine/marks.py` — derived marks, quantity held fixed.
+- `engine/analyzers/live_mark.py` — the second LTV code path. `collateral.py`
+  is untouched so its pinned numbers stay pinned.
+- `Source`/`resolve` extended for non-CSV origins, so `get_fact` shows the
+  timestamped quote and the rule beside the CSV rows.
+
+**Three traps worth remembering.** Change is measured against the provider's own
+previous close, never the snapshot — the snapshot's SPX is synthetic, so
+differencing it against a real quote would report fiction-versus-reality as a
+market move. A yield is not a price: bonds use −duration × change *in points*,
+and treating a yield relatively is a sign error small enough to look plausible.
+And direct property, infrastructure and cash are explicitly `mode: none` —
+appraisal-valued assets do not reprice because an index moved this afternoon.
+
+**The demo this unlocks:** on a real NASDAQ fall of 2%, CF-0001 goes from
+73.71% to 74.68% LTV — Ravi's headroom drops from 1.29 points to 0.32 against
+his 75% trigger, because 53% of his pledged collateral is US tech. CL-0014's
+facility *improves* over the same move, being Hong Kong property and bonds.
+Same market, opposite directions, both traceable.
+
+**Known limit, stated plainly.** FX is exact. Instrument-level marks are
+estimates with their workings attached: a real factor move times a published
+beta. They are labelled derived marks, never prices, and every one cites the
+quote and the rule. The betas and the fixed-income durations are stated
+assumptions — `instruments.csv` carries no duration field — and a reviewer who
+disagrees can edit one YAML file and re-run.
 
 **Why:** everything currently reasons over 5 frozen CSV snapshots. The first
 question from a banker/regulator audience is "does this stay live," and right

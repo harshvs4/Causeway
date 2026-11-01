@@ -100,11 +100,35 @@ def seed_obsidian_config(vault: Path = VAULT_DIR) -> bool:
     return True
 
 
+def file_stem(file: str) -> str:
+    """The folder name for a source origin.
+
+    Not every origin is a file in data/. A live quote arrives as `market_data`
+    and a sensitivity rule as `market_sensitivities.yaml`, so the suffix list
+    has to cover yaml too, or the vault grows a folder with a file extension in
+    its name.
+    """
+    for suffix in (".csv", ".json", ".yaml", ".yml"):
+        if file.endswith(suffix):
+            return file[: -len(suffix)]
+    return file
+
+
 def source_note_name(file: str, row_ref: str) -> str:
-    """A wikilink-safe, unique note name for one source row."""
-    stem = file.replace(".csv", "").replace(".json", "")
-    safe_ref = row_ref.replace("|", "__").replace("/", "-")
-    return f"{stem}__{safe_ref}"
+    """A wikilink-safe, unique note name for one source row.
+
+    A live quote's row_ref is `SERIES@2026-10-30T21:15:59+00:00`. A colon is
+    illegal in a Windows filename and awkward for sync clients even where the
+    filesystem tolerates it. The timestamp has to survive - it is what makes the
+    quote checkable later - so it is transliterated rather than dropped.
+    """
+    safe_ref = (
+        row_ref.replace("|", "__")
+        .replace("/", "-")
+        .replace(":", "-")
+        .replace("+", "p")
+    )
+    return f"{file_stem(file)}__{safe_ref}"
 
 
 def _env() -> Environment:
@@ -167,11 +191,11 @@ def build_vault() -> Path:
 
     for key, row in source_rows.items():
         file, row_ref = key.split("::", 1)
-        folder = VAULT_DIR / "Sources" / file.replace(".csv", "").replace(".json", "")
+        folder = VAULT_DIR / "Sources" / file_stem(file)
         folder.mkdir(parents=True, exist_ok=True)
         rendered = source_template.render(
             file=file,
-            file_stem=file.replace(".csv", "").replace(".json", ""),
+            file_stem=file_stem(file),
             row_ref=row_ref,
             row=row,
             cited_fields=cited_fields[key],
@@ -195,7 +219,7 @@ def build_vault() -> Path:
             folder.mkdir(parents=True, exist_ok=True)
             rendered = source_template.render(
                 file=file,
-                file_stem=file.replace(".csv", "").replace(".json", ""),
+                file_stem=file_stem(file),
                 row_ref=row_ref,
                 row=resolve_row(dataset, file, row_ref),
                 cited_fields=cited_fields[key],

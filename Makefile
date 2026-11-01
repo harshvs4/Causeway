@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault console console-data mcp assist restart serve test clean all
+.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry
 
 setup:
 	uv venv --python 3.12
@@ -9,6 +9,14 @@ setup:
 
 build:
 	$(PY) -m engine.build
+
+# Today's market, re-marked and rebuilt. `build` stays on the snapshot by
+# default so its numbers are reproducible; live is always something you ask for.
+refresh:
+	$(PY) scripts/refresh_snapshot.py
+
+refresh-dry:
+	$(PY) scripts/refresh_snapshot.py --dry-run
 
 vault: build
 	$(PY) vault_build.py
