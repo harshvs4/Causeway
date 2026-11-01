@@ -1,0 +1,233 @@
+# Anchorline — SFF Roadmap
+
+Working backlog for Singapore Fintech Festival. Companion to
+`docs/anchorline-project-plan.md` (problem/product) and
+`docs/anchorline-implementation-plan.md` (original 32h build). This file is a
+task list, not a pitch document — it says what to build and how to know it's
+done.
+
+**Status:** `[ ]` not started · `[~]` in progress · `[x]` done
+
+Ordered by priority. P0 items defang the two objections an SFF judge (banker,
+regulator, VC — not a hackathon peer) will raise first: *"this only runs on
+frozen data"* and *"this only works for the two clients you hand-picked."*
+Do task 0 before 2 and 5 — they're worth more once it's true.
+
+---
+
+## P0 — before anything else
+
+### 0. [ ] Extend engine depth beyond the 2 hand-picked clients
+
+**Why:** `CLIENTS: tuple[str, ...] = ("CL-0002", "CL-0001")` is hardcoded at
+`engine/build.py:31`. Every analyzer except `triage.py` only ever produces
+facts for these two, even though each analyzer is already written to accept
+an arbitrary client-id tuple (`attribution.run(ds, CLIENTS)`, etc. —
+`engine/build.py:34-41`). The README already names CL-0014 as the client the
+triage scan caught "0.59 points from a margin call" — a judge will ask about
+exactly that client next.
+
+**What exactly:**
+- Add `CL-0014` to `CLIENTS` in `engine/build.py:31` at minimum; ideally all
+  20 client ids from `data/clients.csv`.
+- Re-run `make build` and manually recompute CL-0014's headline numbers from
+  raw rows (same standalone-verification discipline the implementation plan
+  used — stdlib `csv`, not the engine's own derived columns) before trusting
+  any new golden-number test.
+- Add golden-number tests for the new client(s) to `tests/`, mirroring the
+  table in `docs/anchorline-implementation-plan.md` §Phase 2.
+- Audit `vault_build.py` and `console/src` for anything that assumes exactly
+  two clients (hardcoded pickers, hardcoded routes) and fix it to iterate
+  over `envelope["clients"]`.
+
+**Definition of done:** `make build` emits facts for every client in
+`CLIENTS`; `make vault` renders all of them with real wikilinks; the console
+client-switcher lists all of them without a code change; test suite has a
+golden-number test per new client.
+
+**Depends on:** nothing. **Effort:** minutes for the config flip; a day
+once you count verifying every new client's numbers and fixing any
+2-client assumptions downstream.
+
+---
+
+### 1. [ ] Run the engine on live, refreshable market data
+
+**Why:** everything currently reasons over 5 frozen CSV snapshots. The first
+question from a banker/regulator audience is "does this stay live," and right
+now the honest answer is no.
+
+**What exactly:**
+- New module `engine/live_feed.py` that fetches current prices for the
+  tickers/underlyings referenced in `instruments.csv` from a market-data
+  provider (free-tier is fine for a demo — Alpha Vantage, Twelve Data, or
+  similar) and produces a derived valuation row.
+- **Structural obstacle to solve first:** facility and holdings columns bake
+  the snapshot date into the column name (`drawn_2026-06-30`,
+  `lending_value_2026-06-30` — see the pattern in
+  `engine/analyzers/triage.py:79-80`). A live snapshot can't just add a new
+  dated column at demo time; `collateral.py` and `liquidity.py` need a second
+  code path that computes LTV from `position_count × live_price` rather than
+  from a column lookup.
+- Extend `engine/models.py`'s `Source` so `file` can legitimately be
+  something other than a `data/*.csv` path (e.g. `"market_data_mcp"`) with
+  `row_ref` carrying a timestamp+ticker instead of a CSV row ref; update
+  `engine/sources.py::resolve` to handle that branch so `get_fact` can still
+  show the row that backs the number.
+- `scripts/refresh_snapshot.py` — a script (cron-able, but doesn't need to
+  actually run on a schedule for the demo) that calls `live_feed.py` and
+  re-runs `make build`.
+
+**Definition of done:** running `make build` at two different times of day
+produces a different CF-0001 LTV because an underlying price moved, and
+`get_fact` on that fact shows a live-quote source, not just a CSV row.
+
+**Depends on:** nothing. **Effort:** 2–3 days — most of it is the column-
+naming workaround in collateral/liquidity, not the API call itself.
+
+---
+
+### 2. [ ] Auto-generate Rehearse personas for every client
+
+**Why:** only one hand-authored persona exists —
+`mcp_server/personas/CL-0002_rehearse.md`. "What happens for a client you
+didn't prep?" is the obvious follow-up question, and today the answer is
+"nothing."
+
+**What exactly:**
+- New script `mcp_server/personas/generate.py` that, for a given
+  `client_id`, pulls the same data `get_documented_objections` already
+  assembles (`mcp_server/server.py:264-318` — objectives, source of wealth,
+  life stage, notes with resistance markers) and renders a persona file from
+  a new Jinja template `templates/persona.md.j2`.
+- No LLM paraphrase of what the client actually said — the persona's
+  objection section is **verbatim quotes from `rm_notes`**, exactly like a
+  Fact's detail text, so it inherits the same traceability property rather
+  than becoming a new ungrounded surface.
+- `make personas` target in the `Makefile` that runs this for every id in
+  `CLIENTS` (and, once task 0 lands, all 20).
+
+**Definition of done:** `make personas` produces one file per client; each
+objection line in each file can be traced to a specific `note_id`, the same
+way a Fact traces to a source row.
+
+**Depends on:** task 0 for full value (more clients to generate for), but
+delivers value immediately with just the current two. **Effort:** 0.5–1 day.
+
+---
+
+## P1 — strongly worth doing if P0 lands with time to spare
+
+### 3. [ ] Ground mandate/compliance findings in real regulatory text, not just internal policy
+
+**Why:** `mandate.py` only checks the bank's own `mandates.csv` bands.
+"Traceable to a compliance reviewer" lands harder with an MAS-adjacent
+audience if a breach also cites the actual regulatory clause it concerns,
+not only the bank's internal rule.
+
+**What exactly:**
+- Curate a small, explicitly-labeled corpus of real public text (e.g. a
+  handful of excerpts from MAS suitability/FAA guidelines) into
+  `data/regulatory/` — quoted verbatim, never paraphrased, same discipline as
+  everything else in this codebase.
+- Add a client_id/breach-type → regulatory-clause mapping config file in
+  `engine/config/` (same spirit as `event_channels.yaml` — human-authored,
+  version-controlled, auditable, not an LLM decision).
+- New analyzer `engine/analyzers/regulatory.py` (or extend `mandate.py`) that
+  attaches a second `Source` — the regulatory clause — to any mandate-breach
+  Fact. Requires the same `Source`/`resolve` extension as task 1 (non-CSV
+  file, text-range `row_ref` instead of a row).
+
+**Definition of done:** a mandate-breach Fact's `sources` includes both the
+CSV row and the specific regulatory clause; a golden test pins the quoted
+clause text against the stored corpus (so an edit to the corpus that breaks
+the quote fails the build, exactly like `verify_quotes` does for data today).
+
+**Depends on:** the `Source`/`resolve` extension from task 1 (do that part
+once, use it twice). **Effort:** 1–2 days, mostly spent responsibly trimming
+real regulatory text rather than writing code.
+
+---
+
+### 4. [ ] Eval harness for Assist — measured precision/recall/latency, not a prose caveat
+
+**Why:** the README's "Known limits" section ("retrieval is BM25... can
+collide with an unrelated real number") is currently a paragraph. A measured
+number on a slide is a much stronger claim to a banking audience than prose,
+and it turns a caveat into a regression test.
+
+**What exactly:**
+- New `tests/eval_assist.py`: a labeled set of ~20–30 synthetic transcript
+  lines per deep client, each mapped to the `fact_id`(s) it should surface.
+- Harness calls `assist.app.ingest()` (or posts to `/transcript`) for each
+  labeled line, records which `fact_id`s actually came back, and computes
+  precision/recall against the label plus wall-clock latency per call.
+- `make eval` target; commit a baseline number and gate the test suite on not
+  regressing below it (e.g. fail if precision or recall drops under 0.7).
+
+**Definition of done:** `make eval` prints a precision/recall/p50/p95-latency
+table; the README's "Known limits" section is updated to cite the measured
+numbers instead of only prose; the check runs in `make test`.
+
+**Depends on:** nothing. **Effort:** ~1 day.
+
+---
+
+### 5. [ ] Calendar-aware triage — "who needs Rehearse this week," not a static table
+
+**Why:** turns the Monday triage ranking (`engine/analyzers/triage.py`) from
+something you click through in a demo into something that looks like a real
+daily workflow, which reads much better live than a table.
+
+**What exactly:**
+- New connector `mcp_server/calendar_tool.py` wrapping a calendar MCP server
+  (e.g. an open-source Google Calendar MCP) to read upcoming meetings.
+- Join meeting attendee name → `client_id`. Reuse the fuzzy-name-matching
+  approach already solved for instrument names in `lookthrough.py` (and
+  logged the same way `dq_report.py` logs its resolutions — an unlogged
+  match here is exactly as bad as an unlogged match there).
+- Cross-reference the joined `client_id` against `triage.rank_book()`
+  (`engine/analyzers/triage.py:50`) to flag meetings whose client is high-rank
+  or carries an open tension/collateral fact.
+
+**Definition of done:** a tool call with no arguments returns "next N
+meetings worth a Rehearse pass first," each annotated with triage rank and
+top signal, each number traceable the same way every other Fact is — no new
+ungrounded text.
+
+**Depends on:** task 2 (personas) to make the suggestion actionable end to
+end. **Effort:** 1–1.5 days, mostly calendar-MCP plumbing and the name-match
+join.
+
+---
+
+## P2 — explicitly deferred, don't start these before SFF
+
+### 6. [ ] CRM / email ingestion as a new note source
+
+**Why deferred:** unstructured CRM/email content can't be trusted as a
+`Source` the way a CSV row or an `rm_notes` entry can without a classification
+step first, and a classifier that's wrong blurs the Verified/Scenario line —
+the one thing in this product that must never blur. Real value, but adds
+governance surface area a two-person team can't finish *and defend under
+judge questioning* in the time available.
+
+**If picked up later:** any ingested note becomes a "candidate RM note"
+routed for human confirmation before it can be cited as a Source — never
+auto-promoted to `Verified/`.
+
+### 7. [ ] Hash-chained / cryptographic audit log
+
+**Why deferred:** the Vault's traceability already gives a mechanical audit
+trail; a hash chain is a real hardening step for a production pilot, not a
+thing an SFF demo needs to prove the point. Revisit only if a specific
+bank/regulator conversation asks for tamper-evidence explicitly.
+
+---
+
+## Sequencing suggestion
+
+1. Task 0 first — nothing else compounds until this is true.
+2. Tasks 1 and 2 in parallel (different files, no shared state).
+3. Task 4 any time — it's pure addition and de-risks everything above it.
+4. Tasks 3 and 5 only if 0–2 land with days to spare.
