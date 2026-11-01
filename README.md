@@ -220,14 +220,47 @@ in the commit history:
   did not: asking whether the collateral was under pressure returned a Hormuz
   projection as flat text, with nothing marking it hypothetical.
 
-**Known limits.** *Fact construction is airtight* — a fact cannot exist carrying a
-number it did not compute. *Transcript checking is advisory* — it catches obvious
-fabrications but matches on magnitude rather than meaning, so an invented figure
-can collide with an unrelated real one. The two are not equally strong and should
-not be claimed as such. The tension matcher folds word stems, catching
-"pharmaceutical" against "Kanto Pharma" but always under-firing on unseen
-synonyms. Retrieval is BM25, chosen because a cue arriving late in a live call is
-worse than no cue.
+**Known limits, measured.** `make eval` runs Assist against 38 labelled lines —
+33 real questions, 5 of small talk where the correct answer is to say nothing.
+The floors are asserted under `make test`, so these numbers can regress but
+cannot quietly rot:
+
+| | | |
+|---|---|---|
+| answered | **0.818** | 27 of 33 questions got a correct card |
+| precision | **0.500** | of the cards shown, the share that belonged |
+| recall | **0.660** | of the available correct cards, the share surfaced |
+| silence kept | **1.000** | all 5 small-talk lines correctly ignored |
+| mute rate | **0.030** | one question produced nothing at all |
+| latency | **0.19 ms** p95 | which is why retrieval is BM25 and not an embedding service |
+
+Precision of 0.5 is the honest headline. Assist shows up to three cards and most
+questions have one right answer, so the right card plus two plausible
+neighbours scores 0.33 on that case while being perfectly useful in a call —
+`answered` is what the RM experiences, precision is how much noise arrives with
+it.
+
+**The eval found a real defect on its first run.** Three of five small-talk
+lines surfaced cue cards: "how was the trip back" matched a collateral cure on
+the single token "back", from *"came back under its trigger"*. No threshold
+fixes that — the score distributions overlap, and that line scored identically
+to the genuine question "how did that get cured". A term can be rare in the
+corpus, and so score highly, while carrying no intent at all. The fix was
+conversational vocabulary in the stopword list, applied to documents and queries
+alike; silence went from 0.400 to 1.000 and recall rose slightly.
+
+The six cases it still gets wrong are listed by `make eval`, and each is a real
+limit rather than a tuning accident: "he told me that account was for everything
+except the mine" shares no significant token with the wrapper finding it should
+surface, "coal" appears nowhere in a fact about *Bara Nusantara Energy*, and
+"diversify" does not stem to "diversification".
+
+*Fact construction is airtight* — a fact cannot exist carrying a number it did
+not compute. *Transcript checking is advisory* — it catches obvious fabrications
+but matches on magnitude rather than meaning, so an invented figure can collide
+with an unrelated real one. The two are not equally strong and should not be
+claimed as such. The tension matcher folds word stems, catching "pharmaceutical"
+against "Kanto Pharma" but always under-firing on unseen synonyms.
 
 ---
 
