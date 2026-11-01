@@ -22,6 +22,7 @@ from typing import Any
 
 import pandas as pd
 
+from engine import regulatory
 from engine.loader import Dataset
 
 _KEYS: dict[str, tuple[str, ...]] = {
@@ -95,6 +96,14 @@ def resolve(
         found = extra.get(source_key(file, row_ref))
         if found is not None:
             return found
+
+    # A regulatory clause is static and on disk, so it resolves itself rather
+    # than being threaded through `extra` the way a live quote is. The row
+    # carries the paragraph, the verbatim text and the provenance - notice,
+    # issue date, URL, retrieval date - because a citation a reviewer cannot
+    # check against the regulator's own document is worth less than none.
+    if file == regulatory.REGULATORY_FILE:
+        return regulatory.clause_row(row_ref)
 
     try:
         keys = _KEYS[file]

@@ -1,0 +1,123 @@
+# Which obligation each kind of finding bears on.
+#
+# Hand-written and version-controlled, like the sensitivity map and the triage
+# weights, and for a sharper version of the same reason. A mapping from a
+# portfolio finding to a regulatory paragraph is a judgement. It should be made
+# by a person, written down, and argued with - never produced at runtime by a
+# model, and never inferred from keyword overlap.
+#
+# "BEARS ON" IS THE WHOLE POINT OF THE WORDING. Every clause referenced here is
+# a suitability obligation owed at the point a recommendation is made.
+# Anchorline analyses a book that already exists, long after any recommendation
+# was given, and has no sight of what was discussed, documented or disclosed at
+# the time. It therefore cannot and does not determine whether an obligation was
+# met. What it can do is put the relevant obligation beside the finding, in the
+# regulator's own words, so the RM knows which conversation to have and a
+# compliance officer knows where to look.
+#
+# A finding type with no entry gets no clause. Silence is correct: inventing a
+# regulatory hook for a finding that has none is worse than letting the finding
+# speak for itself.
+
+findings:
+
+  mandate.single_position:
+    clauses: [FAA-N16-11h, FAA-N16-11g, FAA-N16-8]
+    why: >-
+      A single-name exposure above a mandate limit is, in the Notice's own
+      language, a question of whether the amount invested is a substantial
+      portion of the client's assets - 11(h) - measured against the current
+      investment portfolio at 11(g). Paragraph 8 is the duty those sit under.
+      This is the closest fit in the Notice to what the look-through actually
+      measures, which is why concentration has the strongest regulatory hook of
+      any finding type here rather than the weakest.
+
+  mandate.band:
+    clauses: [FAA-N16-29, FAA-N16-31]
+    why: >-
+      An asset-class weight outside its band is a question about the mandate the
+      bank agreed, not directly about a recommendation. 29 is cited because it
+      requires systems and processes taking into account the nature of the
+      product and the liquidity required, and 31 because the basis for a
+      recommendation must be documented - which is what an RM would point at if
+      the drift was deliberate. A deliberately weaker hook than
+      single-position, and recorded as such.
+
+  mandate.exclusion:
+    clauses: [FAA-N16-29, FAA-N16-11a]
+    why: >-
+      Holding an instrument the mandate excludes runs against the client's
+      stated financial objectives at 11(a) and against the systems-and-process
+      requirement at 29. The exclusion is the bank's own rule; the Notice is
+      what makes the client's objectives part of the picture.
+
+  tension.diversification:
+    clauses: [FAA-N16-11a, FAA-N16-8, FAA-N16-31]
+    why: >-
+      The finding type the Notice speaks to most directly. A documented
+      objective of diversification sitting beside a measured single-name
+      concentration is exactly the gap between 11(a), the client's stated
+      financial objectives, and paragraph 8's requirement that those objectives
+      receive due consideration. 31 follows because if the gap is deliberate,
+      the basis for it is the thing that should be on file.
+
+  tension.source_of_wealth:
+    clauses: [FAA-N16-11d, FAA-N16-11g, FAA-N16-8]
+    why: >-
+      When a client's largest holding and the source of their income are the
+      same bet, the relevant obligation is the one about the client's financial
+      situation at 11(d) - assets and income read together rather than
+      separately - alongside the current portfolio at 11(g).
+
+  tension.wrapper:
+    clauses: [FAA-N16-11g, FAA-N16-29, FAA-N16-35]
+    why: >-
+      A structured product adding to an exposure the client is already
+      concentrated in is a question about the current investment portfolio at
+      11(g) and about the nature and key risks of the product at 29. 35 is cited
+      because the documented basis must include an assessment of the product's
+      disadvantages for this client, which is precisely what a look-through
+      produces.
+
+  tension.preliquidity:
+    clauses: [FAA-N16-11d, FAA-N16-11f, FAA-N16-29]
+    why: >-
+      An illiquid position dominating the book of a client whose plans depend on
+      an event that has not happened is a cash-flow and commitments question -
+      11(d) and 11(f) - and the liquidity limb of 29.
+
+  liquidity.shortfall:
+    clauses: [FAA-N16-11f, FAA-N16-11d, FAA-N16-29]
+    why: >-
+      A promised outflow the book cannot fund speaks to the client's financial
+      commitments at 11(f) and their cash flow at 11(d). 29 names liquidity
+      explicitly among the features that must be taken into account.
+
+  collateral.breach:
+    clauses: [FAA-N16-11d, FAA-N16-11f]
+    why: >-
+      A facility in breach is a liability and a financial commitment - 11(d) and
+      11(f). Nothing in this Notice governs margin lending itself, and no clause
+      here should be read as doing so: a Lombard facility is a credit
+      arrangement and the obligations attaching to it live elsewhere. This entry
+      exists so the finding is not silently left without context, not because
+      the Notice speaks to collateral.
+
+# Finding types deliberately left unmapped, with the reason. Each is a place
+# where attaching a clause would imply a connection the Notice does not make.
+unmapped:
+  attribution: >-
+    "This holding fell 6% and here is the dated event that reaches it" is a
+    statement about the market. No suitability obligation attaches to a price
+    move, and citing one would imply the adviser is answerable for the market.
+  scenario: >-
+    Forward-looking analysis of something that has not happened. Attaching a
+    regulatory obligation to a hypothesis would be the clearest possible way to
+    blur the Verified/Scenario line this product exists to keep sharp.
+  triage: >-
+    An internal ordering of who to call first. It makes no claim about any
+    client's portfolio and concerns the bank's own workload, not the client.
+  lookthrough: >-
+    The look-through measurement is an input. Where it matters for suitability
+    it arrives as mandate.single_position or tension.wrapper, both of which are
+    mapped; citing it twice would double-count one finding.

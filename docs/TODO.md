@@ -217,7 +217,53 @@ delivers value immediately with just the current two. **Effort:** 0.5–1 day.
 
 ## P1 — strongly worth doing if P0 lands with time to spare
 
-### 3. [ ] Ground mandate/compliance findings in real regulatory text, not just internal policy
+### 3. [x] Ground mandate/compliance findings in real regulatory text, not just internal policy
+
+**Done** on `feat/regulatory-grounding`. 299 tests. `data/regulatory/` holds 13
+verbatim excerpts from **MAS Notice FAA-N16**; `engine/config/regulatory_map.yaml`
+records by hand which finding bears on which paragraph, with a reason beside
+every entry; `engine/regulatory.py` attaches the clause as an additional
+`Source`; and `make verify-regulatory` re-downloads the notice and checks every
+quotation against it.
+
+**The line this does not cross is the point of the task.** Every clause is a
+suitability obligation owed *when a recommendation is made*. Anchorline reads a
+book that already exists and cannot see what was discussed, documented or
+disclosed at the time, so it cannot know whether an obligation was met. Facts
+say a finding **bears on** an obligation, quote it verbatim, and state that
+whether it was met is not something the finding can establish. A test refuses
+any fact containing "breach of", "violates", "non-compliant" and six more.
+Deciding compliance is a compliance officer's job; a tool that told an RM they
+were in breach of a MAS notice would be making a legal determination it has no
+standing to make, which is a worse failure than any wrong number.
+
+**Transcribed, not recalled — and it mattered.** A web search summary consulted
+while building this stated the Notice is issued under section 58 of the Act. The
+document says **section 67**. Had the corpus been written from memory or from
+that summary, the repo would carry a wrong citation in the one place a wrong
+citation is least forgivable. The clause text was read out of the published PDF
+and `make verify-regulatory` makes the check repeatable by anyone: 13 passages
+plus the enabling provision, character for character.
+
+**Four fact kinds are deliberately unmapped,** each with its reason on file.
+`scenario` is the important one — attaching a regulatory obligation to a
+hypothesis is the clearest possible way to blur the Verified/Scenario line.
+`attribution` is unmapped because no suitability obligation attaches to a price
+move, and citing one would imply the adviser answers for the market.
+
+**It cost something, and the cost is recorded.** Annotating facts appends a
+sentence to their detail, which lengthened those documents and moved eval recall
+0.700 → 0.680. Worse, the clause *rows* were indexed at first — `context_terms`
+reads every cited row — so legal boilerplate entered the search index and "shall
+we move the Thursday meeting to the afternoon" began matching a diversification
+finding, taking silence from 1.000 to 0.800. `NON_VOCABULARY_SOURCES` now
+excludes them: a clause is cited for provenance, not vocabulary. The cleaner fix
+for the remaining 0.02 is a separate `Fact` field the vault renders and the
+index ignores, rather than appending to `detail` at all.
+
+**Scope.** Only FAA-N16, and only the mandate single-position and tension
+diversification findings are wired, though the map covers nine finding types.
+The corpus is excerpts, not the notice: read the notice. Not legal advice.
 
 **Why:** `mandate.py` only checks the bank's own `mandates.csv` bands.
 "Traceable to a compliance reviewer" lands harder with an MAS-adjacent

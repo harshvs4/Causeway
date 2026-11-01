@@ -1,0 +1,147 @@
+# MAS Notice FAA-N16, quoted verbatim.
+#
+# WHAT THIS IS. Short excerpts from a public Monetary Authority of Singapore
+# notice, transcribed from the consolidated PDF that MAS publishes and checked
+# against it. Every clause carries its paragraph number, the notice, the issue
+# date, the URL it came from and the date it was retrieved, because a regulatory
+# citation that cannot be checked is worse than no citation at all.
+#
+# WHY IT IS QUOTED AND NEVER SUMMARISED. A paraphrase of a regulatory obligation
+# is not the obligation. The rule the rest of this codebase applies to portfolio
+# numbers applies here with more force: nobody should be shown a sentence about
+# what a regulator requires unless that sentence is what the regulator wrote.
+# These were transcribed from the source document rather than recalled - a web
+# search summary consulted while building this stated the Notice was issued
+# under section 58 of the Act, and the document says section 67.
+#
+# WHAT ANCHORLINE DOES NOT CLAIM. These are suitability obligations owed by a
+# financial adviser at the point of making a recommendation. Anchorline analyses
+# a book that already exists. It therefore never asserts that an obligation has
+# been breached, and no fact in this product says so: a finding is reported as
+# *bearing on* a named obligation, with the obligation quoted, so that the
+# person qualified to make that judgement can make it. Deciding compliance is a
+# compliance officer's job, and this is not a compliance tool.
+#
+# Not legal advice, and not a complete reproduction. Read the Notice.
+
+notice: "FAA-N16"
+title: "Notice on Recommendations on Investment Products"
+act: "Financial Advisers Act 2001"
+issued_under: "section 67 of the Financial Advisers Act 2001"
+issue_date: "2011-07-28"
+last_updated: "2025-12-29"
+source_url: "https://www.mas.gov.sg/-/media/mas/regulations-and-financial-stability/regulations-guidance-and-licensing/financial-advisers/notices/notice-on-recommendations-on-investment-products.pdf"
+notice_page: "https://www.mas.gov.sg/regulation/notices/notice-faa-n16"
+retrieved: "2026-11-01"
+
+clauses:
+  FAA-N16-8:
+    paragraph: "8"
+    heading: "Recommendations on Investment Products"
+    text: >-
+      Section 36 of the Act requires licensed financial advisers to have a
+      reasonable basis for any recommendation made, with respect to any
+      investment product, to a person who may reasonably be expected to rely on
+      the recommendation. In particular, the licensed financial adviser shall
+      give due consideration to the person's investment objectives, financial
+      situation and particular needs.
+    elided_footnote_marker: >-
+      The source attaches footnote 1 to the word "recommendation". The marker is
+      omitted here because it is not part of the sentence; the footnote itself
+      reads: "Sections 20(2) and 46 of the Act provides that section 36 also
+      applies to exempt financial advisers, appointed and provisional
+      representatives."
+
+  FAA-N16-11a:
+    paragraph: "11(a)"
+    heading: "Know Your Client"
+    preamble: >-
+      In order for a financial adviser to make a recommendation that takes into
+      account a client's investment objectives, financial situation and
+      particular needs, the financial adviser, except in the circumstances
+      provided in paragraph 11A, shall take reasonable steps to collect and
+      document the following information from the client:
+    text: "the financial objectives of the client;"
+
+  FAA-N16-11b:
+    paragraph: "11(b)"
+    heading: "Know Your Client"
+    text: "the risk tolerance of the client;"
+
+  FAA-N16-11d:
+    paragraph: "11(d)"
+    heading: "Know Your Client"
+    text: >-
+      the financial situation of the client, including assets, liabilities, cash
+      flow and income;
+
+  FAA-N16-11f:
+    paragraph: "11(f)"
+    heading: "Know Your Client"
+    text: "the financial commitments of the client;"
+
+  FAA-N16-11g:
+    paragraph: "11(g)"
+    heading: "Know Your Client"
+    text: >-
+      the current investment portfolio of the client, including any life policy;
+
+  FAA-N16-11h:
+    paragraph: "11(h)"
+    heading: "Know Your Client"
+    text: >-
+      whether the amount to be invested is a substantial portion of the client's
+      assets; and
+
+  FAA-N16-28:
+    paragraph: "28"
+    heading: "Needs Analysis"
+    text: >-
+      Section 36 of the Act requires a financial adviser to analyse the
+      information provided by the client and identify the product that is
+      suitable for the client based on the information obtained from the client.
+
+  FAA-N16-29:
+    paragraph: "29"
+    heading: "Needs Analysis"
+    text: >-
+      A financial adviser shall put in place systems and processes for its
+      representatives to determine whether the product recommended is suitable
+      for the client based on the information obtained from the client. The
+      financial adviser shall take into consideration the nature of the product,
+      key risks and other features including the investment tenor, fees and
+      liquidity required.
+
+  FAA-N16-31:
+    paragraph: "31"
+    heading: "Needs Analysis"
+    text: >-
+      A financial adviser shall explain to its client the basis for its
+      recommendation. The basis on which the financial adviser is making the
+      recommendation to the client shall be documented.
+
+  FAA-N16-32:
+    paragraph: "32"
+    heading: "Needs Analysis"
+    text: >-
+      Where a client does not want: (a) to provide any information requested by
+      the financial adviser in accordance with paragraph 11; or (b) to accept
+      the recommendation of the financial adviser and chooses to proceed with
+      the transaction in another investment product which is not recommended by
+      the financial adviser, the financial adviser may proceed with the client's
+      request, but it shall document the decision of the client and highlight to
+      the client in writing that it is the client's responsibility to ensure the
+      suitability of the product selected.
+
+  FAA-N16-35:
+    paragraph: "35"
+    heading: "Documentation and Record Keeping"
+    text: >-
+      The financial adviser shall make reasonable efforts to document the basis
+      for the recommendation referred to in paragraph 36(b), and such
+      documentation shall include the following: (a) the client's statement of
+      his investment objectives, financial situation and particular needs; (b)
+      the financial adviser's reasonable basis for making the recommendation to
+      the client having regard to the information obtained from the client; and
+      (c) the financial adviser's assessment of the disadvantages of the
+      investment product based on circumstances of the client.

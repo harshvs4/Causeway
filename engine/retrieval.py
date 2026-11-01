@@ -173,6 +173,19 @@ def expand(tokens: Sequence[str],
 _IDENTIFIER = re.compile(r"^[A-Z]{1,5}-[A-Z0-9-]+$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
+# Cited rows whose words are not the vocabulary a conversation uses.
+#
+# context_terms exists to teach the index how the RM and the client actually
+# speak - "Lombard Credit Facility", "Helios Cloud Systems Inc" - by reading the
+# dataset rows a fact cites. A regulatory clause is cited for provenance, not
+# for vocabulary, and indexing it was measurably harmful: the clause rows carry
+# "shall take reasonable steps", a title, an enabling section and a caveat, and
+# once those were in the index "shall we move the Thursday meeting to the
+# afternoon" matched a diversification finding. Silence fell from 1.000 to
+# 0.800 and answered with it. The clause is still cited, still resolvable, still
+# shown in the vault and the fact drawer - it is simply not searched.
+NON_VOCABULARY_SOURCES = frozenset({"mas_faa_n16.yaml"})
+
 
 def context_terms(rows: Iterable[dict]) -> str:
     """Vocabulary from the rows a fact cites.
@@ -217,6 +230,7 @@ class FactIndex:
             cited = [
                 source_rows.get(f"{s['file']}::{s['row_ref']}", {})
                 for s in fact.get("sources", [])
+                if s["file"] not in NON_VOCABULARY_SOURCES
             ]
             # The kind is the fact's topic, so a question that names it should
             # prefer that cluster. Repeated rather than scored separately

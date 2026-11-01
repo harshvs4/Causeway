@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from engine import regulatory
 from engine.analyzers.lookthrough import exposures_by_portfolio
 from engine.loader import LATEST_SNAPSHOT, Dataset
 from engine.models import Fact, Source
@@ -167,6 +168,9 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                     )
                     directed_sources = ()
 
+                reg_text, reg_quotes, reg_sources = regulatory.annotation(
+                    "mandate.single_position"
+                )
                 through_wrapper = (
                     f" {exposure.indirect_base / total * 100:.2f} points of this is "
                     f"reached through a wrapper and would not appear on a report that "
@@ -189,7 +193,7 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                         ),
                         detail=(
                             f"Measured after look-through.{through_wrapper} "
-                            f"{provenance}"
+                            f"{provenance}{reg_text}"
                         ),
                         numbers={
                             "weight_pct": weight,
@@ -203,7 +207,7 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                         # The instruments rows cited below are what verify it -
                         # directly for a name held outright, and through
                         # underlying_reference for a basket constituent.
-                        quotes=(str(exposure.display_name),),
+                        quotes=(str(exposure.display_name),) + reg_quotes,
                         sources=(
                             _mandate_source(mandate_code, str(bands["asset_class"].iloc[0])),
                         )
@@ -218,7 +222,8 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                             for instrument_id in instrument_ids
                             if instrument_id in instruments.index
                         )
-                        + directed_sources,
+                        + directed_sources
+                        + reg_sources,
                         as_of=LATEST_SNAPSHOT,
                         confidence="derived",
                         severity=min(100, 55 + int((weight - limit) * 2)),

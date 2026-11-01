@@ -24,6 +24,7 @@ from engine.analyzers.lookthrough import (
     normalise_name,
     parse_underlying,
 )
+from engine import regulatory
 from engine.loader import LATEST_SNAPSHOT, Dataset
 from engine.models import Fact, Source
 
@@ -264,6 +265,9 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
         # -- T3: stated diversification vs measured concentration ------------
         objectives = str(client["objectives"])
         if "diversif" in objectives.lower() and biggest_pct >= BOOK_CONCENTRATION_PCT:
+            reg_text, reg_quotes, reg_sources = regulatory.annotation(
+                "tension.diversification"
+            )
             facts.append(
                 Fact(
                     fact_id=f"F-{client_id.replace('-', '')}-TENSION-DIVERSIFICATION",
@@ -279,17 +283,18 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                         f"{biggest.display_name} at {biggest.total_base:,.0f} of "
                         f"{book_usd:,.0f}. Whether that gap is deliberate is a "
                         f"conversation, not a data error — but it should be a "
-                        f"conversation the RM has on purpose."
+                        f"conversation the RM has on purpose.{reg_text}"
                     ),
                     numbers={"book_pct": biggest_pct,
                              "exposure_usd": biggest.total_base,
                              "book_usd": book_usd},
-                    quotes=(objectives,),
+                    quotes=(objectives,) + reg_quotes,
                     sources=tuple(
                         [_client_source(client_id, ("objectives",))]
                         + biggest.direct_rows
                         + biggest.indirect_rows
-                    ),
+                    )
+                    + reg_sources,
                     as_of=LATEST_SNAPSHOT,
                     confidence="derived",
                     severity=min(100, int(biggest_pct + 20)),

@@ -134,6 +134,37 @@ test touches the network. On a real 2% NASDAQ fall, CF-0001 moves 73.71% →
 74.68% and Ravi's headroom drops from 1.29 points to 0.32 — while CL-0014's
 facility *improves* on the same tape, being Hong Kong property and bonds.
 
+### The regulatory leg, and the line it will not cross
+
+A mandate breach measured against the bank's own band is a true statement about
+the bank's own rule. It is not what a compliance reviewer is looking at. So
+`data/regulatory/` carries short excerpts from **MAS Notice FAA-N16**, quoted
+verbatim with the paragraph number, the enabling section, the URL and the date
+retrieved, and `engine/config/regulatory_map.yaml` records — by hand, with a
+reason beside every entry — which finding bears on which paragraph. A
+concentration above a mandate limit cites paragraph 11(h): *"whether the amount
+to be invested is a substantial portion of the client's assets"*.
+
+**It never says "breach".** Every clause is a suitability obligation owed *when
+a recommendation is made*. Anchorline reads a book that already exists and
+cannot see what was discussed, documented or disclosed at the time, so it cannot
+know whether an obligation was met. Facts say a finding **bears on** an
+obligation, quote it, and add that whether it was met is not something the
+finding can establish. A test refuses any fact containing "breach of", "violates"
+or "non-compliant". Deciding compliance is a compliance officer's job; this is
+not a compliance tool.
+
+**The text was transcribed, not recalled — and that mattered.** A web search
+summary consulted while building this said the Notice is issued under section 58
+of the Act. The document says **section 67**. `make verify-regulatory`
+re-downloads the notice from the URL the corpus records and checks all 13 quoted
+passages and the enabling provision appear character for character, so the
+"quoted verbatim" claim is checkable rather than asserted.
+
+Four fact kinds are deliberately left unmapped, each with its reason on file —
+`scenario` most importantly, because attaching a regulatory obligation to a
+hypothesis is the clearest possible way to blur the Verified/Scenario line.
+
 ---
 
 ## Running it
@@ -143,8 +174,9 @@ make setup       # uv venv (Python 3.12) + dependencies
 make build       # analyzers → build/facts.json   (snapshot, reproducible)
 make refresh     # today's market → re-marked book → rebuild
 make refresh-dry # fetch and report quotes, change nothing
-make test        # 283 tests
+make test        # 299 tests
 make eval        # Assist retrieval, measured against 38 labelled lines
+make verify-regulatory  # re-check the quoted MAS clauses against the notice
 
 make vault       # → vault/ ; open the folder as an Obsidian vault
 make personas    # a rehearsal persona per client, from verbatim notes
@@ -189,7 +221,8 @@ this project avoids everywhere else.
 | Clients | **all 20 analysed** by every analyzer; 2 carry a rehearsal persona and hand-recomputed goldens |
 | Vault | 741 notes — 203 Verified, 39 Scenario, 478 Sources, 20 Clients |
 | Rehearse | 1 hand-written persona · **20 generated**, every position cited to a note_id |
-| Tests | **283 passing** |
+| Regulatory | MAS FAA-N16 · **13 clauses** quoted verbatim, provenance checkable by `make verify-regulatory` |
+| Tests | **299 passing** |
 
 Breadth is not the opposite of depth here. The analyzers are deterministic
 pandas, so running them across the whole book costs a `groupby` and hides

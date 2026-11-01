@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry personas eval
+.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry personas eval verify-regulatory
 
 setup:
 	uv venv --python 3.12
@@ -17,6 +17,12 @@ refresh:
 
 refresh-dry:
 	$(PY) scripts/refresh_snapshot.py --dry-run
+
+# Re-download the MAS notice and check every quoted clause against it. Needs the
+# network and pdftotext, so it is not part of `make test` - but it is how the
+# "quoted verbatim" claim is checked rather than trusted.
+verify-regulatory:
+	$(PY) scripts/verify_regulatory.py
 
 vault: build
 	$(PY) vault_build.py
