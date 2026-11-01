@@ -75,8 +75,27 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def resolve(dataset: Dataset, file: str, row_ref: str) -> dict[str, Any]:
-    """Return the single row a Source points at, as plain JSON-able values."""
+def resolve(
+    dataset: Dataset,
+    file: str,
+    row_ref: str,
+    extra: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Return the single row a Source points at, as plain JSON-able values.
+
+    `extra` carries origins that are not rows in data/ - a live market quote, or
+    a rule out of a sensitivity map. They are keyed the same way
+    (`source_key(file, row_ref)`) and consumed the same way, so a fact derived
+    from a live price shows its provenance in the console, the vault and
+    get_fact exactly as a fact derived from a CSV row does. They are passed in
+    rather than fetched here, which keeps engine/live_feed the only module in
+    the codebase that touches the network.
+    """
+    if extra:
+        found = extra.get(source_key(file, row_ref))
+        if found is not None:
+            return found
+
     try:
         keys = _KEYS[file]
         frame: pd.DataFrame = getattr(dataset, _FRAMES[file])

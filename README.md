@@ -103,6 +103,36 @@ data/*.csv, rm_notes.json          read-only, never mutated
 | `mandate` | Bands, single-position limits measured after look-through, binding exclusions |
 | `scenario` | Strait of Hormuz escalate / reopen, shocked against today's holdings |
 | `triage` | All 20 clients ranked on seven weighted signals, weights published |
+| `live_mark` | A pledged facility re-marked against today's real market (opt-in) |
+
+### The live leg, and what it does not claim
+
+The instruments here are synthetic — "Helios Cloud Systems Inc" has no ticker.
+The 23 series in `market_context.csv` are not: SPX, NASDAQ, HSI, STI, VIX,
+Brent, gold, TTF, the 10-year and nine FX pairs are all observable right now, so
+those are what `make refresh` goes and gets, keylessly. Instrument prices are
+then **derived** from the observed factor move through 35 hand-authored
+sensitivity rules in `engine/config/market_sensitivities.yaml`, each carrying
+its reasoning.
+
+**A mark is not a price, and says so.** Every live fact cites the timestamped
+quote, the rule applied, its coefficient, and the holdings re-marked — and the
+rule's reasoning is quoted from the rule row itself, so `verify_quotes` checks
+it. FX is exact, being ECB reference rates. Instrument marks are estimates with
+their workings attached.
+
+Three things it refuses to do. Change is measured against the provider's own
+previous close, never the snapshot — the snapshot's SPX is synthetic, and
+differencing it against a real quote would report fiction-versus-reality as a
+market move. Bonds use −duration × change *in points*, because treating a yield
+like a price is a sign error small enough to look plausible. Direct property,
+infrastructure and cash are explicitly `mode: none`: appraisal-valued assets do
+not reprice because an index moved this afternoon.
+
+`make build` stays on the snapshot, so the goldens below remain exact and no
+test touches the network. On a real 2% NASDAQ fall, CF-0001 moves 73.71% →
+74.68% and Ravi's headroom drops from 1.29 points to 0.32 — while CL-0014's
+facility *improves* on the same tape, being Hong Kong property and bonds.
 
 ---
 
@@ -110,8 +140,10 @@ data/*.csv, rm_notes.json          read-only, never mutated
 
 ```bash
 make setup       # uv venv (Python 3.12) + dependencies
-make build       # analyzers → build/facts.json
-make test        # 220 tests
+make build       # analyzers → build/facts.json   (snapshot, reproducible)
+make refresh     # today's market → re-marked book → rebuild
+make refresh-dry # fetch and report quotes, change nothing
+make test        # 243 tests
 
 make vault       # → vault/ ; open the folder as an Obsidian vault
 make console     # → localhost:5173
@@ -136,9 +168,10 @@ agent has no business enumerating other clients — and use
 | | |
 |---|---|
 | Engine | 8 analyzers · **241 facts** · 463 cited source rows · 353 quotes verified against source |
+| Live | 20 of 23 real series quotable keylessly · 35 published sensitivity rules |
 | Clients | **all 20 analysed** by every analyzer; 2 carry a rehearsal persona and hand-recomputed goldens |
 | Vault | 741 notes — 203 Verified, 39 Scenario, 478 Sources, 20 Clients |
-| Tests | **220 passing** |
+| Tests | **243 passing** |
 
 Breadth is not the opposite of depth here. The analyzers are deterministic
 pandas, so running them across the whole book costs a `groupby` and hides

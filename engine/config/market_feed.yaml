@@ -1,0 +1,159 @@
+# Which real-world series Anchorline can quote live, and from where.
+#
+# The instruments in this dataset are synthetic - "Helios Cloud Systems Inc" has
+# no ticker and never will. market_context.csv, however, carries twenty-three
+# series that are genuinely observable in the real world, and those are what a
+# live feed can honestly refresh. Instrument prices are then *derived* from the
+# observed factor move through engine/config/market_sensitivities.yaml, and are
+# labelled as derived marks rather than quoted prices.
+#
+# This file is hand-written and version-controlled on purpose, for the same
+# reason the triage weights are: a reviewer has to be able to see which real
+# instrument stood in for which series, and disagree with it. A mapping chosen
+# at runtime by a model would make the live number unauditable.
+#
+# Fields per series:
+#   provider  yahoo | frankfurter
+#   symbol    the provider's own identifier
+#   proxy     true when the quote is a *stand-in* rather than the series itself.
+#             A proxy's move is a reasonable estimate of the series' move; its
+#             absolute level is not comparable and is never substituted.
+#   why       required for every proxy, and for every declared gap.
+#
+# Percentage change is always measured against the provider's own previous
+# close, never against the dataset's snapshot value. The snapshot figures are
+# synthetic; differencing a real quote against a synthetic one would report the
+# gap between fiction and reality as though it were a market move.
+
+providers:
+  yahoo:
+    # Keyless and unofficial. Chosen because the alternative keyless source
+    # (Stooq) sits behind a JavaScript proof-of-work challenge a script cannot
+    # clear, and every keyed provider's free tier rate-limits below what a
+    # twenty-three series refresh needs. Swappable: see QuoteSource.
+    base_url: "https://query1.finance.yahoo.com/v8/finance/chart/"
+    kind: equity_and_commodity
+  frankfurter:
+    # European Central Bank reference rates. Authoritative rather than
+    # best-effort, which is why FX is the one leg of this feed that is exact.
+    base_url: "https://api.frankfurter.dev/v1/"
+    kind: fx
+
+series:
+  # --- equity indices ------------------------------------------------------
+  SPX:
+    provider: yahoo
+    symbol: "^GSPC"
+  NASDAQ_COMP:
+    provider: yahoo
+    symbol: "^IXIC"
+  HSI:
+    provider: yahoo
+    symbol: "^HSI"
+  STI:
+    provider: yahoo
+    symbol: "^STI"
+  MSCI_ASIA_XJP:
+    provider: yahoo
+    symbol: "AAXJ"
+    proxy: true
+    why: >-
+      The MSCI AC Asia ex-Japan index itself is not quoted without a licence.
+      AAXJ is the iShares ETF tracking it, so its daily move is a close estimate
+      of the index move. Its level is a share price in USD, not index points,
+      and is never used as the series level.
+
+  # --- volatility ----------------------------------------------------------
+  VIX:
+    provider: yahoo
+    symbol: "^VIX"
+
+  # --- commodities ---------------------------------------------------------
+  BRENT_USD_BBL:
+    provider: yahoo
+    symbol: "BZ=F"
+    proxy: true
+    why: >-
+      Front-month Brent futures rather than the physical spot assessment, which
+      price reporting agencies publish under licence. The front month tracks
+      spot closely enough for a daily move; the level carries a small basis.
+  GOLD_USD_OZ:
+    provider: yahoo
+    symbol: "GC=F"
+    proxy: true
+    why: >-
+      COMEX gold futures rather than the LBMA spot fix. Same reasoning as Brent:
+      the daily move tracks, the level carries a basis.
+  TTF_GAS_EUR_MWH:
+    provider: yahoo
+    symbol: "TTF=F"
+    proxy: true
+    why: >-
+      Dutch TTF front-month futures. The dataset quotes TTF in EUR/MWh, which is
+      the futures convention, so the unit matches; the contract month does not.
+
+  # --- rates ---------------------------------------------------------------
+  UST_10Y_PCT:
+    provider: yahoo
+    symbol: "^TNX"
+    why: >-
+      CBOE's 10-year Treasury yield index, quoted directly in percent, matching
+      the dataset's unit. Not a proxy - it is the yield.
+
+  # --- FX, from ECB reference rates ----------------------------------------
+  # Direction matters more here than anywhere else in the codebase. A series id
+  # <base><quote> means quote-per-base, so the request has to be made with the
+  # matching base or the rate comes back inverted - the single easiest way to
+  # produce a confidently wrong number, and what engine/loader.py's FX helper
+  # exists to prevent.
+  EURUSD:
+    provider: frankfurter
+    symbol: "EUR>USD"
+  GBPUSD:
+    provider: frankfurter
+    symbol: "GBP>USD"
+  USDSGD:
+    provider: frankfurter
+    symbol: "USD>SGD"
+  USDJPY:
+    provider: frankfurter
+    symbol: "USD>JPY"
+  USDCHF:
+    provider: frankfurter
+    symbol: "USD>CHF"
+  USDHKD:
+    provider: frankfurter
+    symbol: "USD>HKD"
+  USDIDR:
+    provider: frankfurter
+    symbol: "USD>IDR"
+  USDINR:
+    provider: frankfurter
+    symbol: "USD>INR"
+  USDTHB:
+    provider: frankfurter
+    symbol: "USD>THB"
+  USDCNH:
+    provider: frankfurter
+    symbol: "USD>CNY"
+    proxy: true
+    why: >-
+      The ECB publishes onshore CNY, not offshore CNH. They are different
+      instruments and trade apart, sometimes by more than a figure under stress.
+      CNY is the closest authoritative daily rate available without a licence,
+      and the substitution is recorded on every fact that uses it.
+
+# Series with no honest live source. These fall back to the last snapshot value
+# and say so in their Source, rather than being filled in with something that
+# merely looks like a quote.
+gaps:
+  UST_2Y_PCT: >-
+    No keyless constant-maturity 2-year quote exists. CBOE publishes ^FVX for
+    five years and ^IRX for thirteen weeks; neither is a two-year yield, and
+    interpolating between them would be inventing a number.
+  FED_FUNDS_UPPER_PCT: >-
+    An administered policy rate set by the FOMC, not a traded price. It moves on
+    meeting dates rather than continuously, so "live" is the wrong idea for it.
+  US_CPI_YOY_PCT: >-
+    A monthly statistical release from the BLS. Refreshing it intraday would
+    imply a frequency the statistic does not have.
