@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry personas
+.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry personas eval
 
 setup:
 	uv venv --python 3.12
@@ -43,6 +43,11 @@ serve: assist
 
 test:
 	$(PY) -m pytest -q
+
+# Assist retrieval, measured against a labelled set. Prints the table; the
+# floors it commits to are also asserted under `make test`.
+eval: build
+	$(PY) -m tests.eval_assist
 
 restart: build console-data
 	@echo "restarting services so none of them serves a stale build..."

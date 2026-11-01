@@ -21,13 +21,44 @@ from rank_bm25 import BM25Okapi
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
-STOPWORDS = frozenset(
+_GRAMMATICAL = frozenset(
     """a an and are as at be been but by can did do does for from had has have
     he her his how i if in into is it its me my no not of on or our out she so
-    that the their them then there these they this to under up was we were what
-    when where which who why will with would you your about just really quite
-    very some any also then now here get got let say said tell told think""".split()
+    that the their them then there these they this to under up us was we were
+    what when where which who why will with would you your about just really
+    quite very some any also then now here get got let say said tell told
+    think""".split()
 )
+
+# A live call is mostly not about the portfolio, and these are what the rest of
+# it is made of.
+#
+# Measured before they were added: three of five small-talk lines surfaced cue
+# cards. "how was the trip back" matched a collateral cure on the single token
+# "back", out of "came back under its trigger". The lesson is that a term can
+# be *rare* in the corpus - and therefore score highly - while carrying no
+# intent whatsoever, so neither a score threshold nor an IDF gate catches this:
+# the score distributions for small talk and real questions overlap, and
+# "how did that get cured" scores identically to "how was the trip back".
+#
+# Applied to documents and queries alike, so nothing can match on one side only.
+# Most of these do appear somewhere in the fact corpus and losing them costs
+# little - a cure is still reachable by "cured", "trigger" or "LTV".
+#
+# "us" sits in _GRAMMATICAL above rather than here: it is the pronoun that was
+# missing from an otherwise complete set beside we/our/me/my, and it was
+# matching "US Technology Leaders Fund" on "let us find a time next month".
+_CONVERSATIONAL = frozenset(
+    """back time times month months week weeks day days year years
+    morning afternoon evening tomorrow yesterday today tonight next last
+    meeting call trip holiday family children kids wife husband weather
+    find move moving reschedule schedule speak spoke talk talking catch
+    hope hoping good great fine well thanks thank please sorry
+    been being come came going went keep keeps make makes made take
+    takes""".split()
+)
+
+STOPWORDS = _GRAMMATICAL | _CONVERSATIONAL
 
 
 _SUFFIXES = (("ies", "y"), ("ing", ""), ("ed", ""), ("es", ""), ("s", ""), ("e", ""))

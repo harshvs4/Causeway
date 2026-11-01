@@ -24,6 +24,11 @@ dev = ["pytest>=8.0"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# eval_*.py as well as test_*.py. The Assist eval is a measurement first and a
+# test second, and it keeps that name because `make eval` is how it is read -
+# but it has to run under `make test` too, or the floors it commits to would
+# only ever be checked by somebody who remembered to ask.
+python_files = ["test_*.py", "eval_*.py"]
 
 [build-system]
 requires = ["setuptools>=68"]

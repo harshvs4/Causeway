@@ -248,7 +248,50 @@ real regulatory text rather than writing code.
 
 ---
 
-### 4. [ ] Eval harness for Assist — measured precision/recall/latency, not a prose caveat
+### 4. [x] Eval harness for Assist — measured precision/recall/latency, not a prose caveat
+
+**Done** on `feat/assist-eval`. `make eval` runs 38 labelled lines — 33 real
+questions and 5 of small talk where the correct answer is silence. 268 tests;
+the floors are asserted under `make test` via a `python_files` entry, so they
+can regress but cannot quietly rot.
+
+Measured: **answered 0.818**, **precision 0.500**, **recall 0.660**, **silence
+kept 1.000**, mute rate 0.030, latency **0.14 ms p50 / 0.19 ms p95**.
+
+Precision of 0.5 is the honest headline, not a number to hide. Assist shows up
+to three cards and most questions have one right answer, so the right card plus
+two plausible neighbours scores 0.33 on that case while being perfectly useful
+in a call. `answered` is what the RM experiences; precision is how much noise
+arrives with it.
+
+**The eval found a real defect on its first run.** Three of five small-talk
+lines surfaced cue cards — "how was the trip back" matched a collateral cure on
+the single token "back", out of *"came back under its trigger"*. No threshold
+fixes it: the score distributions overlap, and that line scored *identically* to
+the genuine question "how did that get cured". A term can be rare in the corpus,
+and therefore score highly, while carrying no intent at all — so IDF gating
+fails for the same reason. The fix was conversational vocabulary added to the
+stopword list, applied to documents and queries alike. Silence went 0.400 →
+1.000 and recall rose slightly, so nothing was traded away.
+
+Labels are written to be fair rather than flattering: several cases use words
+appearing nowhere in the fact they should match, because that is where lexical
+retrieval fails and an eval avoiding them would measure the easy half.
+
+**Six cases still fail, each a real limit worth its own follow-up:**
+- `diversify` does not stem to `diversification`, so the tension fact is
+  unreachable by the word the client actually uses. The stemmer's suffix list
+  handles inflection, not derivation.
+- "coal" appears nowhere in a fact about *Bara Nusantara Energy* — a vocabulary
+  gap between how an RM speaks and how the data is named.
+- "he told me that account was for everything except the mine" shares no
+  significant token with the wrapper finding. Known and documented.
+- "position" is ambiguous between a holding and a mandate single-position
+  limit; "market" between a market move and market value.
+
+Worth considering next: a small hand-authored synonym map (`coal → Bara
+Nusantara`, `diversify → diversification`), which would be auditable in the same
+way `market_sensitivities.yaml` is, and which the eval would immediately score.
 
 **Why:** the README's "Known limits" section ("retrieval is BM25... can
 collide with an unrelated real number") is currently a paragraph. A measured
