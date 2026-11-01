@@ -150,7 +150,43 @@ naming workaround in collateral/liquidity, not the API call itself.
 
 ---
 
-### 2. [ ] Auto-generate Rehearse personas for every client
+### 2. [x] Auto-generate Rehearse personas for every client
+
+**Done** on `feat/auto-personas`. `make personas` writes one per client into
+`mcp_server/personas/generated/` — 20 personas, 262 tests.
+
+Built from verbatim note text with the `note_id` printed beside every position,
+because a paraphrase of what a client said is no longer what they said, and a
+rehearsal against a paraphrase trains the RM for a conversation that never
+happened. The generator's own prose is confined to behavioural scaffolding that
+is constant or selected by a data check.
+
+**A persona carries no portfolio figure.** It names the `fact_id` of each thing
+the client cannot answer and tells the agent to look the number up — a figure
+sitting in a prompt is one the agent will state in a rehearsal without ever
+calling a tool, which is the Fact invariant's failure mode one layer out. A test
+asserts every numeral in every persona traces to a quoted note or the client's
+own record, reusing `engine.grounding.claimed` so that "a numeral a reader would
+take as a claim" means the same thing here as in the Fact contract.
+
+Also honest about its own limits: the resistance check is the same keyword list
+the MCP tool exposes (imported, not re-listed, so the two cannot drift), and
+where no marker fires the persona says *do not manufacture a fight* and carries
+the caveat that the check can only under-fire. CL-0014's N-018 is the live
+example — he brushes off a concentration warning in words the list does not
+catch.
+
+**The tests caught a real defect.** CL-0017 is a family office with no age; the
+column is `NaN`, and `{{ client.age|int }}` rendered it as `Age | 0` — a
+fabricated fact about a client arriving through a Jinja filter rather than an
+analyzer. Missing fields are now omitted rather than defaulted, with a
+regression test. Also fixed: the client was addressed by `name.split(' ')[0]`,
+which assumes given-name-first order and would have called Lau Chi Ming by his
+family name.
+
+The hand-written `CL-0002_rehearse.md` stays tracked and is never overwritten —
+it carries judgement a generator cannot — and generated personas are gitignored
+like `build/` and `vault/`.
 
 **Why:** only one hand-authored persona exists —
 `mcp_server/personas/CL-0002_rehearse.md`. "What happens for a client you

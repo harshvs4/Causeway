@@ -1,7 +1,7 @@
 # Anchorline. `make setup` once, then `make build`.
 PY := .venv/bin/python
 
-.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry
+.PHONY: setup build vault console console-data mcp assist restart serve test clean all refresh refresh-dry personas
 
 setup:
 	uv venv --python 3.12
@@ -20,6 +20,11 @@ refresh-dry:
 
 vault: build
 	$(PY) vault_build.py
+
+# A rehearsal persona per client, from verbatim notes. Depends on build so the
+# pressure points can be read off real findings rather than guessed at.
+personas: build
+	$(PY) -m mcp_server.personas.generate
 
 mcp:
 	$(PY) -m mcp_server.server
