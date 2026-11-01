@@ -251,7 +251,7 @@ def test_each_question_in_a_conversation_gets_its_own_answer(fresh):
     expected = [
         ("he's worried about the collateral", "F-CL0002-COLLAT-CURE"),
         ("can he actually fund the family trust", "F-CL0002-LIQUIDITY-CN-003"),
-        ("what about his helios exposure", "F-CL0002-LOOKTHRU-PF-0003"),
+        ("what about his helios exposure", "F-CL0002-LOOKTHRU-PF-0003-HELIOSCLOUDSYSTEMS"),
         ("did he breach the facility", "F-CL0002-COLLAT-BREACH"),
     ]
     for phrase, wanted in expected:
@@ -264,7 +264,7 @@ def test_the_latest_utterance_outranks_earlier_context(fresh):
     """Ask about collateral, then about Helios. The second answer must be Helios."""
     say("he's worried about the collateral")
     cues = say("what about his helios exposure")
-    assert cues[0]["fact_id"] == "F-CL0002-LOOKTHRU-PF-0003"
+    assert cues[0]["fact_id"] == "F-CL0002-LOOKTHRU-PF-0003-HELIOSCLOUDSYSTEMS"
 
 
 def test_context_still_rescues_a_fragment(fresh):

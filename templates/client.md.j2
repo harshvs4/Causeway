@@ -21,6 +21,8 @@ generated: true
 
 **Source of wealth:** {{ client.source_of_wealth }}
 
+Both quoted from [[{{ source_note('clients.csv', client.client_id) }}|the client row]].
+
 ## What Anchorline found
 
 {% for kind, group in facts_by_kind.items() %}

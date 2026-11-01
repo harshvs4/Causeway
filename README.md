@@ -41,8 +41,8 @@ client in rehearsal, and choosing *which already-computed fact* to surface live.
 
 ## What it found
 
-Two clients analysed in depth. Every figure below is reproducible from `data/` and
-pinned as a test.
+Twenty clients analysed, two of them studied closely enough to rehearse against.
+Every figure below is reproducible from `data/` and pinned as a test.
 
 **Ravi Chandrasekaran (CL-0002)** holds Helios Cloud Systems directly at 14.00% of
 his advisory portfolio *and* an equity-linked note on Helios at a further 10.64% —
@@ -64,7 +64,16 @@ account — the one he told his RM was for everything except the mine — and it
 worst-of basket contains the same company. True exposure: **44.99% of his book**.
 
 **The book-level scan found a client nobody was looking at.** CL-0014 sits **0.59
-points** from a margin call, tighter than either client we chose to study.
+points** from a margin call — 69.41% LTV against a 70.00% trigger — tighter than
+either client we chose to study, and it has never actually breached. Of the USD
+88,847,450 of PF-0016 that a holdings report calls daily-tradeable, **USD
+1,208,998** can be sold before that facility hits its trigger.
+
+He is a Hong Kong property developer whose largest position is direct property,
+so his biggest exposure and his source of wealth are the same bet. He ranks
+second in the book behind Ravi. Nobody chose him; the scan did — and because
+every analyzer now runs across all twenty clients, his page, his cue cards and
+his vault notes exist on the same footing as theirs.
 
 ---
 
@@ -102,7 +111,7 @@ data/*.csv, rm_notes.json          read-only, never mutated
 ```bash
 make setup       # uv venv (Python 3.12) + dependencies
 make build       # analyzers → build/facts.json
-make test        # 202 tests
+make test        # 220 tests
 
 make vault       # → vault/ ; open the folder as an Obsidian vault
 make console     # → localhost:5173
@@ -126,10 +135,17 @@ agent has no business enumerating other clients — and use
 
 | | |
 |---|---|
-| Engine | 8 analyzers · **40 facts** · 65 cited source rows · 33 quotes verified against source |
-| Clients | 2 deep, 20 ranked |
-| Vault | 111 notes — 36 Verified, 4 Scenario, 67 Sources |
-| Tests | **202 passing** |
+| Engine | 8 analyzers · **241 facts** · 463 cited source rows · 353 quotes verified against source |
+| Clients | **all 20 analysed** by every analyzer; 2 carry a rehearsal persona and hand-recomputed goldens |
+| Vault | 741 notes — 203 Verified, 39 Scenario, 478 Sources, 20 Clients |
+| Tests | **220 passing** |
+
+Breadth is not the opposite of depth here. The analyzers are deterministic
+pandas, so running them across the whole book costs a `groupby` and hides
+nothing — what cannot be mass-produced is a persona written from one person's
+real objections, and numbers recomputed by hand from the raw rows. Those two
+clients are marked as such in the console and in `build/facts.json`, so nothing
+implies the other eighteen went unexamined.
 
 **Scenario is isolated from every surface that answers "what is true"** — excluded
 from live cue cards, spoken answers, and the search the rehearsal agent uses. It

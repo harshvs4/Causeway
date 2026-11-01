@@ -75,18 +75,19 @@ def test_normalisation_keeps_distinct_names_distinct():
 # --- GOLDEN: CL-0002 Helios look-through ----------------------------------
 
 def test_helios_combined_exposure_is_24_64_pct(lookthrough_facts):
-    fact = lookthrough_facts["F-CL0002-LOOKTHRU-PF-0003"]
+    fact = lookthrough_facts["F-CL0002-LOOKTHRU-PF-0003-HELIOSCLOUDSYSTEMS"]
     assert fact.numbers["combined_pct"] == pytest.approx(24.6400, abs=1e-4)
 
 
 def test_helios_splits_14_0035_direct_and_10_6366_via_eln(lookthrough_facts):
-    fact = lookthrough_facts["F-CL0002-LOOKTHRU-PF-0003"]
+    fact = lookthrough_facts["F-CL0002-LOOKTHRU-PF-0003-HELIOSCLOUDSYSTEMS"]
     assert fact.numbers["direct_pct"] == pytest.approx(14.0035, abs=1e-4)
     assert fact.numbers["indirect_pct"] == pytest.approx(10.6366, abs=1e-4)
 
 
 def test_helios_fact_cites_both_the_direct_row_and_the_eln_row(lookthrough_facts):
-    refs = {s.row_ref for s in lookthrough_facts["F-CL0002-LOOKTHRU-PF-0003"].sources}
+    fact = lookthrough_facts["F-CL0002-LOOKTHRU-PF-0003-HELIOSCLOUDSYSTEMS"]
+    refs = {s.row_ref for s in fact.sources}
     assert refs == {
         "PF-0003|SYN-ST-0103|2026-08-26",   # direct equity
         "PF-0003|SYN-SP-0502|2026-08-26",   # the ELN

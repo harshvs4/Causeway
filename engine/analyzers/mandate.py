@@ -198,10 +198,26 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                             "indirect_pct": exposure.indirect_base / total * 100,
                             "directed_subscriptions": float(len(directed)),
                         },
+                        # An instrument is *named* "Fixed Coupon Note 4.75% 12M";
+                        # reproducing that is quotation, not a computed claim.
+                        # The instruments rows cited below are what verify it -
+                        # directly for a name held outright, and through
+                        # underlying_reference for a basket constituent.
+                        quotes=(str(exposure.display_name),),
                         sources=(
                             _mandate_source(mandate_code, str(bands["asset_class"].iloc[0])),
                         )
                         + tuple(exposure.direct_rows + exposure.indirect_rows)
+                        + tuple(
+                            Source(
+                                file="instruments.csv",
+                                row_ref=instrument_id,
+                                fields=("instrument_name", "underlying_reference",
+                                        "concentration_limit_applies"),
+                            )
+                            for instrument_id in instrument_ids
+                            if instrument_id in instruments.index
+                        )
                         + directed_sources,
                         as_of=LATEST_SNAPSHOT,
                         confidence="derived",
@@ -291,7 +307,23 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0001",)) -> list[Fa
                             numbers={"weight_pct": weight},
                             quotes=(notes, str(row["instrument_name"])),
                             sources=(
-                                _mandate_source(mandate_code, str(row["asset_class"])),
+                                # Keyed on a band this mandate actually has.
+                                # mandate_notes is a mandate-level field carried
+                                # by every band row, whereas the *holding's*
+                                # asset class need not be banded at all - an
+                                # excluded instrument sitting in an unbanded
+                                # class would point the citation at no row.
+                                _mandate_source(
+                                    mandate_code, str(bands["asset_class"].iloc[0])
+                                ),
+                                Source(
+                                    file="holdings.csv",
+                                    row_ref=(
+                                        f"{row['portfolio_id']}|{row['instrument_id']}|"
+                                        f"{row['snapshot_date'].strftime('%Y-%m-%d')}"
+                                    ),
+                                    fields=("market_value_base", "instrument_name"),
+                                ),
                                 Source(
                                     file="instruments.csv",
                                     row_ref=str(row["instrument_id"]),

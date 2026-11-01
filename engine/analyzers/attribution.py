@@ -95,6 +95,11 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
                         "confidence": float(row.confidence),
                     },
                     quotes=(
+                        # The name is a quotation, not a claim: a bond is
+                        # *called* "... 2.375% 2031", and that numeral is the
+                        # issue's coupon, not a figure this fact computed.
+                        # verify_quotes checks it against the cited rows.
+                        str(row.instrument_name),
                         str(row.matched_event_description),
                         str(row.transmission),
                     ),

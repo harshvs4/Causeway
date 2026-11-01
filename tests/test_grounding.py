@@ -103,7 +103,14 @@ def test_every_headline_the_engine_wrote_checks_out_against_its_own_numbers():
     envelope = json.loads((BUILD_DIR / "facts.json").read_text())
     for fact in envelope["facts"]:
         allowed = list((fact.get("numbers") or {}).values())
-        bad = ungrounded(fact["headline"], allowed)
+        # Quotes are passed through because they are exactly what the Fact
+        # contract exempts, and verify_quotes already matched each one against a
+        # cited row. A bond named "... 2.375% 2031" carries a coupon nobody
+        # computed; checking a headline more strictly than the contract that
+        # produced it only ever flags the contract.
+        bad = ungrounded(
+            fact["headline"], allowed, quotes=tuple(fact.get("quotes") or ())
+        )
         assert bad == [], f"{fact['fact_id']}: {bad}"
 
 

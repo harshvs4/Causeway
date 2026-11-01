@@ -8,6 +8,7 @@ to touch data/ or re-derive anything.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Callable, Iterable
 
@@ -27,18 +28,26 @@ from engine.sources import resolve, source_key, verify_quotes
 
 SCHEMA_VERSION = 1
 
-# Clients we have gone deep on. Depth over breadth is the plan.
-CLIENTS: tuple[str, ...] = ("CL-0002", "CL-0001")
+# Clients carrying hand-authored artefacts beyond what the engine derives: a
+# rehearsal persona, and golden-number tests recomputed from the raw rows by
+# hand. "Depth over breadth" lives here, not in the engine's coverage - the
+# analyzers are deterministic, so running them over the whole book costs a
+# groupby and hides nothing, whereas a persona is written one client at a time.
+DEEP_CLIENTS: tuple[str, ...] = ("CL-0002", "CL-0001")
 
-ANALYZERS: list[tuple[str, Callable[[Dataset], Iterable[Fact]]]] = [
-    ("attribution", lambda ds: attribution.run(ds, CLIENTS)),
-    ("lookthrough", lambda ds: lookthrough.run(ds, CLIENTS)),
-    ("collateral", lambda ds: collateral.run(ds, CLIENTS)),
-    ("tension", lambda ds: tension.run(ds, CLIENTS)),
-    ("liquidity", lambda ds: liquidity.run(ds, CLIENTS)),
-    ("mandate", lambda ds: mandate.run(ds, CLIENTS)),
-    ("triage", lambda ds: triage.run(ds, CLIENTS)),
-    ("scenario", lambda ds: scenario.run(ds, CLIENTS)),
+# Narrow the build to specific clients, comma-separated. Exists so a demo can
+# cut the book down without editing code; unset means the whole book.
+CLIENTS_ENV = "ANCHORLINE_CLIENTS"
+
+ANALYZERS: list[tuple[str, Callable[[Dataset, tuple[str, ...]], Iterable[Fact]]]] = [
+    ("attribution", attribution.run),
+    ("lookthrough", lookthrough.run),
+    ("collateral", collateral.run),
+    ("tension", tension.run),
+    ("liquidity", liquidity.run),
+    ("mandate", mandate.run),
+    ("triage", triage.run),
+    ("scenario", scenario.run),
 ]
 
 
@@ -46,10 +55,36 @@ class DuplicateFactId(RuntimeError):
     """Two facts share an id. They would silently overwrite each other."""
 
 
-def collect(dataset: Dataset) -> list[Fact]:
+class UnknownClient(ValueError):
+    """A requested client is not in the dataset. Silently analysing nothing
+    would look identical to a client with no findings."""
+
+
+def clients_in(dataset: Dataset) -> tuple[str, ...]:
+    """Every client in the dataset, in file order."""
+    return tuple(str(client_id) for client_id in dataset.clients["client_id"])
+
+
+def selected_clients(dataset: Dataset) -> tuple[str, ...]:
+    """Which clients this build covers. The whole book unless told otherwise."""
+    raw = os.environ.get(CLIENTS_ENV, "").strip()
+    if not raw:
+        return clients_in(dataset)
+    wanted = tuple(part.strip() for part in raw.split(",") if part.strip())
+    known = set(clients_in(dataset))
+    unknown = [client_id for client_id in wanted if client_id not in known]
+    if unknown:
+        raise UnknownClient(
+            f"{CLIENTS_ENV} names client(s) not in the dataset: {unknown}"
+        )
+    return wanted
+
+
+def collect(dataset: Dataset, client_ids: tuple[str, ...] | None = None) -> list[Fact]:
+    client_ids = clients_in(dataset) if client_ids is None else client_ids
     facts: list[Fact] = []
     for name, analyzer in ANALYZERS:
-        produced = list(analyzer(dataset))
+        produced = list(analyzer(dataset, client_ids))
         print(f"  {name:<14} {len(produced):>4} facts")
         facts.extend(produced)
 
@@ -77,8 +112,12 @@ def source_rows(dataset: Dataset, facts: list[Fact]) -> dict[str, dict]:
 
 def build() -> dict:
     dataset = load()
-    print(f"loaded dataset; {len(ANALYZERS)} analyzer(s) registered")
-    facts = collect(dataset)
+    clients = selected_clients(dataset)
+    print(
+        f"loaded dataset; {len(ANALYZERS)} analyzer(s) registered, "
+        f"{len(clients)} client(s) selected"
+    )
+    facts = collect(dataset, clients)
 
     # Re-validate on the way out. Facts are validated at construction, but this
     # guarantees anything reaching disk survives a round trip through the model.
@@ -115,7 +154,11 @@ def build() -> dict:
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "as_of": LATEST_SNAPSHOT,
-        "clients": list(CLIENTS),
+        "clients": list(clients),
+        # Marked separately rather than filtered: the console and the vault both
+        # need to say which clients carry hand-verified numbers and a rehearsal
+        # persona, without implying the other eighteen were not analysed.
+        "deep_clients": [c for c in DEEP_CLIENTS if c in clients],
         "fact_count": len(payload),
         "facts": payload,
         "source_rows": rows,

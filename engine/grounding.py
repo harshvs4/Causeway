@@ -38,8 +38,20 @@ SCALES = (1.0, 1e3, 1e6, 1e9)
 MAGNITUDES = range(0, 10)          # round to units, tens, hundreds, thousands...
 
 
-def claimed(text: str) -> list[tuple[str, float, int]]:
-    """(as_written, value, decimals) for every numeral read as a claim."""
+def claimed(text: str, quotes: tuple[str, ...] = ()) -> list[tuple[str, float, int]]:
+    """(as_written, value, decimals) for every numeral read as a claim.
+
+    `quotes` are verbatim strings copied out of a cited source row, and their
+    numerals are stripped before extraction - a bond is *named* "... 2.375%
+    2031", and that coupon belongs to the issue, not to anything computed here.
+    This mirrors engine.models.claimed_numbers deliberately: the two checkers
+    differ in how permissively they match a value, and must not also differ on
+    what counts as a claim. Exempting a quote is only safe because
+    engine.sources.verify_quotes has already matched it against the real field
+    value of a row the fact cites.
+    """
+    for quote in quotes:
+        text = text.replace(quote, " ")
     scrubbed = _IDENTIFIER.sub(" ", _ISO_DATE.sub(" ", text))
     found: list[tuple[str, float, int]] = []
     for match in _NUMERAL.finditer(scrubbed):
@@ -115,6 +127,7 @@ def explain(
     text: str,
     allowed: Iterable[float | Source],
     ignore_small_integers: bool = True,
+    quotes: tuple[str, ...] = (),
 ) -> list[Claim]:
     """Every number in `text`, each with the row and field that accounts for it.
 
@@ -125,7 +138,7 @@ def explain(
     """
     sources = _as_sources(allowed)
     out: list[Claim] = []
-    for written, value, decimals in claimed(text):
+    for written, value, decimals in claimed(text, quotes):
         if ignore_small_integers and decimals == 0 and abs(value) < 10_000:
             continue
         out.append(
@@ -152,7 +165,8 @@ def is_supported(value: float, decimals: int, allowed: Iterable[float]) -> bool:
 
 
 def ungrounded(text: str, allowed: Iterable[float],
-               ignore_small_integers: bool = True) -> list[str]:
+               ignore_small_integers: bool = True,
+               quotes: tuple[str, ...] = ()) -> list[str]:
     """Numbers in `text` that no allowed value can account for.
 
     Small bare integers are ignored by default: years, counts, "two decimal
@@ -160,7 +174,7 @@ def ungrounded(text: str, allowed: Iterable[float],
     """
     return [
         claim.written
-        for claim in explain(text, allowed, ignore_small_integers)
+        for claim in explain(text, allowed, ignore_small_integers, quotes)
         if not claim.grounded
     ]
 

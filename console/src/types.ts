@@ -32,7 +32,13 @@ export interface Envelope {
   schema_version: number;
   generated_at: string;
   as_of: string;
+  // Every client the engine analysed. All eight analyzers run over all of
+  // them — the analyzers are deterministic, so breadth costs a groupby.
   clients: string[];
+  // The subset carrying hand-authored artefacts: a rehearsal persona, and
+  // golden-number tests recomputed from the raw rows by hand. That is where
+  // "depth over breadth" actually lives, and the UI must not conflate the two.
+  deep_clients: string[];
   fact_count: number;
   facts: Fact[];
   source_rows: Record<string, Record<string, string | number | null>>;

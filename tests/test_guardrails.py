@@ -117,7 +117,7 @@ def test_duplicate_fact_ids_are_refused(monkeypatch, ds):
 
     twin = _fact()
     monkeypatch.setattr(
-        build_module, "ANALYZERS", [("twins", lambda _ds: [twin, twin])]
+        build_module, "ANALYZERS", [("twins", lambda _ds, _clients: [twin, twin])]
     )
     with pytest.raises(DuplicateFactId, match="F-TEST-QUOTE"):
         build_module.collect(ds)
@@ -129,7 +129,7 @@ def test_distinct_fact_ids_pass(monkeypatch, ds):
     monkeypatch.setattr(
         build_module,
         "ANALYZERS",
-        [("pair", lambda _ds: [_fact(), _fact(fact_id="F-TEST-QUOTE-2")])],
+        [("pair", lambda _ds, _clients: [_fact(), _fact(fact_id="F-TEST-QUOTE-2")])],
     )
     assert len(build_module.collect(ds)) == 2
 
@@ -240,5 +240,9 @@ def test_every_number_in_every_scenario_fact_has_provenance():
             continue
         sources = retrievable_sources(envelope, fact["client_id"])
         text = f"{fact['headline']} {fact['detail']}"
-        ungrounded = [c.written for c in explain(text, sources) if not c.grounded]
+        ungrounded = [
+            c.written
+            for c in explain(text, sources, quotes=tuple(fact.get("quotes") or ()))
+            if not c.grounded
+        ]
         assert ungrounded == [], f"{fact['fact_id']}: {ungrounded}"
