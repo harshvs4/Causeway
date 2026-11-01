@@ -1,0 +1,86 @@
+# What the RM says, against what the data is called.
+#
+# `make eval` measures the gap this closes. Several labelled cases were failing
+# for vocabulary reasons rather than ranking ones: "what did the coal position
+# do" retrieved the two facts citing a source-of-wealth field that happens to
+# contain the word "coal", and not the attribution facts about the holding
+# itself, which name it "Bara Nusantara Energy Tbk" and contain no "coal" at
+# all. No amount of score tuning fixes a word that is absent.
+#
+# EXPANSION IS QUERY-SIDE ONLY. Documents are never rewritten. Expanding the
+# corpus would shift every BM25 score at once and silently move the goldens
+# pinned in tests/; expanding the question only adds ways to reach a fact that
+# was already there. A synonym matching nothing in a given client's corpus
+# costs that client nothing.
+#
+# Hand-written and version-controlled, like the sensitivity map and the triage
+# weights, for the same reason: a reviewer has to be able to see which word was
+# treated as which, and disagree. The eval scores any change immediately, so a
+# bad entry here surfaces as a precision or silence regression rather than as a
+# mystery.
+
+# --------------------------------------------------------------------------
+# Word forms the stemmer cannot reach.
+#
+# engine.retrieval.stem strips inflection - breach/breached, fund/funds - which
+# is all it claims to do. Derivation is a different problem: "diversify" and
+# "diversification" share a root no suffix rule gets to, and the client says
+# the verb while the fact says the noun. These are facts about language, not
+# about this dataset, and would hold for another bank's book too.
+# --------------------------------------------------------------------------
+morphology:
+  diversify: [diversification, diversified]
+  diversifying: [diversification, diversified]
+  # "concentration" is deliberately not a target: the word appears in fact_ids
+  # but in no fact text, and fact_ids are not indexed. A synonym pointing at it
+  # would match nothing, which the config test now refuses.
+  concentrated: [position, exposure]
+  concentration: [position, exposure]
+  borrow: [drawn, facility, lombard]
+  borrowing: [drawn, facility, lombard]
+  borrowed: [drawn, facility, lombard]
+  sellable: [sell, liquid, tradeable]
+  liquidate: [sell, liquid]
+  pledged: [collateral, secured]
+  # "breaching" is not here: it already stems to "breach", so an entry would
+  # expand a word to itself. The config test refuses that, which is how this
+  # one was found.
+
+# --------------------------------------------------------------------------
+# Spoken shorthand for an instrument or a sector.
+#
+# DATASET-SPECIFIC, and the weakest part of this file. In a real deployment
+# these would be generated from instrument metadata - an issuer alias table, a
+# sector taxonomy - rather than typed out, because a hand-maintained list goes
+# stale the first time the book changes. They are written here because the
+# dataset carries no alias field at all, and because the alternative is
+# pretending an RM says "Bara Nusantara Energy Tbk" out loud.
+#
+# None of them invents a relationship. A test checks every right-hand term
+# against the vocabulary the index actually builds, so an entry pointing at a
+# word that is in no fact fails rather than quietly matching nothing.
+# --------------------------------------------------------------------------
+vocabulary:
+  # CL-0001's family business. clients.csv records the source of wealth as
+  # "family coal mining and energy group"; the holding is "Bara Nusantara
+  # Energy Tbk". A question about "the coal position" means the holding.
+  coal: [bara, nusantara]
+  mine: [bara, nusantara]
+  mines: [bara, nusantara]
+  mining: [bara, nusantara]
+
+  # CL-0002's largest listed names. "tech" is what gets said aloud;
+  # "technology" is what the fund is called.
+  tech: [technology]
+  semis: [semiconductor]
+  chips: [semiconductor]
+
+  # Instruments by what they do rather than by their title.
+  perp: [perpetual]
+  perps: [perpetual]
+  reit: [estate]
+
+  # Facilities. An RM says "the line" or "the loan"; the data says CF-0001.
+  loan: [facility, lombard, drawn]
+  line: [facility, lombard]
+  overdraft: [facility, drawn]

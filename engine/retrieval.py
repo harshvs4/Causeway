@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Iterable, Sequence
 
 from rank_bm25 import BM25Okapi
@@ -96,6 +98,54 @@ def tokenise(text: str) -> list[str]:
     ]
 
 
+SYNONYMS_PATH = Path(__file__).resolve().parent / "config" / "retrieval_synonyms.yaml"
+
+
+@lru_cache(maxsize=1)
+def load_synonyms(path: str | None = None) -> dict[str, tuple[str, ...]]:
+    """Spoken term -> corpus terms, stemmed on both sides.
+
+    Flattened from the two sections of the config, which are separated for the
+    reader rather than for the code: `morphology` is about English and would
+    hold for any book, `vocabulary` is about this dataset's naming and would
+    not.
+
+    Stemming the map at load time is what keeps it consistent with the query it
+    expands - an entry written as "diversifying" has to match the token
+    tokenise() actually produces, not the word as typed.
+    """
+    import yaml
+
+    config = yaml.safe_load(Path(path or SYNONYMS_PATH).read_text()) or {}
+    flattened: dict[str, tuple[str, ...]] = {}
+    for section in ("morphology", "vocabulary"):
+        for spoken, written in (config.get(section) or {}).items():
+            key = stem(str(spoken).lower())
+            expansions = tuple(stem(str(w).lower()) for w in written)
+            # A term appearing in both sections merges rather than overwrites.
+            flattened[key] = tuple(dict.fromkeys(flattened.get(key, ()) + expansions))
+    return flattened
+
+
+def expand(tokens: Sequence[str],
+           synonyms: dict[str, tuple[str, ...]] | None = None) -> list[str]:
+    """A query's tokens, plus the corpus words they stand in for.
+
+    Query side only. The original tokens are kept and the expansions appended,
+    so a question that already used the data's own vocabulary ranks exactly as
+    it did before - expansion can add a way to find a fact, never take one
+    away. Duplicates are kept out so one spoken word cannot outweigh the rest
+    of the sentence simply by expanding into three.
+    """
+    synonyms = load_synonyms() if synonyms is None else synonyms
+    out = list(tokens)
+    for token in tokens:
+        for expansion in synonyms.get(token, ()):
+            if expansion not in out:
+                out.append(expansion)
+    return out
+
+
 _IDENTIFIER = re.compile(r"^[A-Z]{1,5}-[A-Z0-9-]+$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
@@ -174,6 +224,11 @@ class FactIndex:
         tokens = tokenise(query)
         if not tokens:
             return []
+        # The question is expanded, never the corpus. See engine/config/
+        # retrieval_synonyms.yaml: "coal" has to be able to reach a holding
+        # the data calls "Bara Nusantara Energy Tbk", and no ranking change
+        # reaches a word that is simply absent.
+        tokens = expand(tokens)
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(zip(self.facts, scores), key=lambda pair: -pair[1])
         if not ranked or ranked[0][1] <= min_score:

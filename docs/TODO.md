@@ -289,9 +289,34 @@ retrieval fails and an eval avoiding them would measure the easy half.
 - "position" is ambiguous between a holding and a mandate single-position
   limit; "market" between a market move and market value.
 
-Worth considering next: a small hand-authored synonym map (`coal → Bara
-Nusantara`, `diversify → diversification`), which would be auditable in the same
-way `market_sensitivities.yaml` is, and which the eval would immediately score.
+**Follow-up: synonym map — done** on `feat/retrieval-synonyms`.
+`engine/config/retrieval_synonyms.yaml`, split into a `morphology` half that is
+about English (`diversify → diversification`, which the stemmer cannot reach
+because it strips inflection, not derivation) and a `vocabulary` half that is
+about this dataset's naming (`coal → bara nusantara`). Expansion is **query-side
+only**: the corpus is never rewritten, so a question already using the data's
+own words ranks exactly as before, and expansion can add a route to a fact but
+never remove one.
+
+Scored by the eval it was built against: **answered 0.818 → 0.848, mute rate
+0.030 → 0.000**, with precision, recall and silence all held. 282 tests.
+
+The config tests caught two dead entries while being written — `concentration →
+concentration` (the word appears in `fact_id`s, which are not indexed) and
+`breaching → breach` (already the same stem). Both now fail the build rather
+than silently matching nothing.
+
+Honest about the weak half: the `vocabulary` section is hand-maintained and
+would go stale the first time the book changes. A real deployment would generate
+it from instrument metadata — an issuer alias table, a sector taxonomy — and the
+file says so. It is written out here because the dataset carries no alias field
+at all, and the alternative is pretending an RM says "Bara Nusantara Energy Tbk"
+out loud.
+
+Five eval cases still fail, and the remaining ones are not vocabulary problems:
+"position" is ambiguous between a holding and a mandate limit, and "what did the
+coal position **do**" carries no term separating a question about movement from
+one about size. Both would need something other than lexical matching.
 
 **Why:** the README's "Known limits" section ("retrieval is BM25... can
 collide with an unrelated real number") is currently a paragraph. A measured

@@ -259,14 +259,18 @@ def run_eval(cases: list[tuple[str, str, frozenset[str]]] | None = None) -> Metr
 # Committed baseline
 # ===========================================================================
 #
-# Measured on 38 labelled cases, 2026-11-01:
+# Measured on 38 labelled cases, 2026-11-01, after the synonym map:
 #
-#     answered       0.818     27 of 33 questions got a correct card
+#     answered       0.848     28 of 33 questions got a correct card
 #     precision      0.500     half the cards shown belonged there
 #     recall         0.660
 #     silence kept   1.000     all 5 small-talk lines correctly ignored
-#     mute rate      0.030     one question produced nothing
-#     latency        0.14 ms p50, 0.19 ms p95
+#     mute rate      0.000     every question produced at least one card
+#     latency        0.13 ms p50, 0.15 ms p95
+#
+# Two changes moved these, each found by this file rather than by inspection:
+#   conversational stopwords   silence 0.400 -> 1.000, recall 0.640 -> 0.660
+#   query-side synonym map     answered 0.818 -> 0.848, mute 0.030 -> 0.000
 #
 # The floors sit just under those, with enough margin to survive a different
 # machine. Raise one only after the measurement moves. Lowering one to make a
@@ -277,10 +281,14 @@ def run_eval(cases: list[tuple[str, str, frozenset[str]]] | None = None) -> Metr
 # the right card plus two plausible neighbours scores 0.33 on that case while
 # being perfectly useful in a live call. `answered` is the metric that tracks
 # what the RM experiences; precision tracks how much noise comes with it.
-MIN_ANSWERED = 0.80
+MIN_ANSWERED = 0.82
 MIN_PRECISION = 0.45
 MIN_RECALL = 0.60
 MIN_SILENCE_KEPT = 1.00
+# Every real question should put *something* on screen. This is the metric the
+# synonym map exists to hold: a question whose vocabulary the corpus does not
+# share produced nothing at all before it.
+MAX_MUTE_RATE = 0.05
 # Deliberately loose. This asserts "fast enough that a cue is not late", not a
 # tight regression guard - measured p95 is 0.19 ms, and BM25 was chosen over an
 # embedding service for exactly this reason.
@@ -302,6 +310,12 @@ def test_precision_has_not_regressed(metrics):
 
 def test_recall_has_not_regressed(metrics):
     assert metrics.recall >= MIN_RECALL, _table(metrics)
+
+
+def test_no_real_question_goes_unanswered(metrics):
+    """Under-firing, which is what the synonym map addresses: a question using
+    words the corpus does not share used to produce nothing at all."""
+    assert metrics.mute_rate <= MAX_MUTE_RATE, _table(metrics)
 
 
 def test_small_talk_surfaces_nothing(metrics):
@@ -338,7 +352,7 @@ def _table(metrics: Metrics) -> str:
         f"  silence kept     {metrics.silence_kept:.3f}  "
         f"(>= {MIN_SILENCE_KEPT}) small talk correctly ignored",
         f"  mute rate        {metrics.mute_rate:.3f}  "
-        f"questions that produced nothing at all",
+        f"(<= {MAX_MUTE_RATE}) questions that produced nothing at all",
         f"  latency p50      {metrics.latency(50):.2f} ms",
         f"  latency p95      {metrics.latency(95):.2f} ms  "
         f"(<= {MAX_P95_LATENCY_MS} ms)",
