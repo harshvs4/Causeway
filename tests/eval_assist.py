@@ -142,6 +142,44 @@ CASES: list[tuple[str, str, frozenset[str]]] = [
 ]
 
 
+# Sequences played without resetting between turns, which is how a real call
+# arrives. Scored on whether each fact appeared *at some point*, because that is
+# what the RM experiences: a card put up on turn one is still on screen on turn
+# two, and Assist's ninety-second cooldown deliberately declines to repeat it.
+#
+# This exists because the per-utterance set misreports one case. "Was that the
+# market or was it something he did" scores as a miss in isolation - it returns
+# attribution facts - yet in sequence the collateral driver fact is already up
+# from the question before it, which is the whole reason the cooldown is there.
+# Measuring only isolated lines would have called that a retrieval failure and
+# sent someone tuning a ranker to fix a panel that was already correct.
+CONVERSATIONS: list[tuple[str, list[str], frozenset[str]]] = [
+    (
+        "CL-0002",
+        [
+            "thanks for making the time",
+            "I wanted to go through the facility with you",
+            "why did the facility breach in June",
+            "was that the market or was it something he did",
+            "where does it sit now",
+        ],
+        frozenset({"F-CL0002-COLLAT-BREACH", "F-CL0002-COLLAT-DRIVER",
+                   "F-CL0002-COLLAT-CURRENT"}),
+    ),
+    (
+        "CL-0001",
+        [
+            "he says he wants to diversify away from the business",
+            "but the custody account is basically all the one company",
+            "does that note add to the same exposure",
+        ],
+        frozenset({"F-CL0001-TENSION-DIVERSIFICATION",
+                   "F-CL0001-CONCENTRATION-PF-0002",
+                   "F-CL0001-TENSION-WRAPPER-SYN-SP-0505"}),
+    ),
+]
+
+
 @dataclass
 class CaseResult:
     client_id: str
@@ -255,18 +293,53 @@ def run_eval(cases: list[tuple[str, str, frozenset[str]]] | None = None) -> Metr
     return metrics
 
 
+def run_conversations() -> list[tuple[str, frozenset[str], set[str]]]:
+    """Play each sequence through one session. (client, wanted, surfaced)."""
+    load_facts()
+    out: list[tuple[str, frozenset[str], set[str]]] = []
+    for client_id, turns, wanted in CONVERSATIONS:
+        session = session_for(client_id)
+        session.window.clear()
+        session.last_surfaced.clear()
+        surfaced: set[str] = set()
+        for said in turns:
+            cues = asyncio.run(
+                ingest(TranscriptChunk(client_id=client_id, text=said))
+            )
+            surfaced |= {cue["fact_id"] for cue in cues}
+        out.append((client_id, wanted, surfaced))
+    return out
+
+
 # ===========================================================================
 # Committed baseline
 # ===========================================================================
 #
-# Measured on 38 labelled cases, 2026-11-01:
+# Measured on 38 labelled cases plus 2 conversations, 2026-11-01:
 #
-#     answered       0.818     27 of 33 questions got a correct card
-#     precision      0.500     half the cards shown belonged there
-#     recall         0.660
+#     answered       0.909     30 of 33 questions got a correct card
+#     precision      0.507
+#     recall         0.700
 #     silence kept   1.000     all 5 small-talk lines correctly ignored
-#     mute rate      0.030     one question produced nothing
-#     latency        0.14 ms p50, 0.19 ms p95
+#     mute rate      0.000     every question produced at least one card
+#     latency        0.13 ms p50, 0.15 ms p95
+#
+# Four changes moved these, every one found by this file rather than by
+# inspection, and not one of them a trade - precision and silence held or rose
+# each time:
+#
+#     conversational stopwords   silence  0.400 -> 1.000
+#     query-side synonym map     answered 0.818 -> 0.848, mute 0.030 -> 0.000
+#     strong-verb synonyms       answered 0.848 -> 0.879   (sell / sold)
+#     kind weighting             answered 0.879 -> 0.909, recall 0.660 -> 0.700
+#
+# One single-utterance case remains wrong, and is left wrong. "What did the coal
+# position do this year" wants the attribution facts and carries no term
+# separating a question about movement from one about size: "do" and "did" are
+# stopwords and belong there, and "move" was tested as a non-stopword and made
+# every metric worse, silence worst of all. It needs something other than
+# lexical matching, and pretending otherwise would mean fitting the ranker to a
+# single labelled line.
 #
 # The floors sit just under those, with enough margin to survive a different
 # machine. Raise one only after the measurement moves. Lowering one to make a
@@ -277,10 +350,14 @@ def run_eval(cases: list[tuple[str, str, frozenset[str]]] | None = None) -> Metr
 # the right card plus two plausible neighbours scores 0.33 on that case while
 # being perfectly useful in a live call. `answered` is the metric that tracks
 # what the RM experiences; precision tracks how much noise comes with it.
-MIN_ANSWERED = 0.80
-MIN_PRECISION = 0.45
-MIN_RECALL = 0.60
+MIN_ANSWERED = 0.88
+MIN_PRECISION = 0.48
+MIN_RECALL = 0.66
 MIN_SILENCE_KEPT = 1.00
+# Every real question should put *something* on screen. This is the metric the
+# synonym map exists to hold: a question whose vocabulary the corpus does not
+# share produced nothing at all before it.
+MAX_MUTE_RATE = 0.05
 # Deliberately loose. This asserts "fast enough that a cue is not late", not a
 # tight regression guard - measured p95 is 0.19 ms, and BM25 was chosen over an
 # embedding service for exactly this reason.
@@ -304,6 +381,12 @@ def test_recall_has_not_regressed(metrics):
     assert metrics.recall >= MIN_RECALL, _table(metrics)
 
 
+def test_no_real_question_goes_unanswered(metrics):
+    """Under-firing, which is what the synonym map addresses: a question using
+    words the corpus does not share used to produce nothing at all."""
+    assert metrics.mute_rate <= MAX_MUTE_RATE, _table(metrics)
+
+
 def test_small_talk_surfaces_nothing(metrics):
     """A prompter that fires on "how was the trip" is noise in a live call. This
     is the only metric here held at 1.0."""
@@ -314,6 +397,16 @@ def test_a_cue_arrives_fast_enough_to_be_useful(metrics):
     """A cue arriving late in a live call is worse than no cue. That is why
     retrieval is BM25 and not an embedding service."""
     assert metrics.latency(95) <= MAX_P95_LATENCY_MS, _table(metrics)
+
+
+def test_a_conversation_surfaces_everything_the_rm_needs():
+    """Scored over a sequence rather than a line. A card raised on turn one is
+    still on screen on turn two, and the cooldown deliberately declines to
+    repeat it - so the question is whether the RM ever got it, not whether it
+    came back on the exact utterance that mentioned it."""
+    for client_id, wanted, surfaced in run_conversations():
+        missing = wanted - surfaced
+        assert not missing, f"{client_id} never surfaced {sorted(missing)}"
 
 
 def test_the_labelled_set_covers_both_deep_clients_and_both_behaviours():
@@ -338,7 +431,7 @@ def _table(metrics: Metrics) -> str:
         f"  silence kept     {metrics.silence_kept:.3f}  "
         f"(>= {MIN_SILENCE_KEPT}) small talk correctly ignored",
         f"  mute rate        {metrics.mute_rate:.3f}  "
-        f"questions that produced nothing at all",
+        f"(<= {MAX_MUTE_RATE}) questions that produced nothing at all",
         f"  latency p50      {metrics.latency(50):.2f} ms",
         f"  latency p95      {metrics.latency(95):.2f} ms  "
         f"(<= {MAX_P95_LATENCY_MS} ms)",

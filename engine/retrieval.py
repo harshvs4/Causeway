@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Iterable, Sequence
 
 from rank_bm25 import BM25Okapi
@@ -64,6 +66,30 @@ STOPWORDS = _GRAMMATICAL | _CONVERSATIONAL
 _SUFFIXES = (("ies", "y"), ("ing", ""), ("ed", ""), ("es", ""), ("s", ""), ("e", ""))
 _MIN_STEM = 3
 
+# How many times a fact's own kind appears in its indexed text.
+#
+# Tuned against the labelled set in tests/eval_assist.py rather than by taste,
+# and the sweep is worth recording because tuning against an eval is how evals
+# get gamed:
+#
+#     weight   answered  precision  recall   silence
+#        1       0.879     0.500     0.680    1.000
+#        3       0.879     0.485     0.660    1.000
+#        5       0.909     0.507     0.700    1.000
+#        8       0.909     0.507     0.700    1.000
+#
+# Five is taken as the smallest value on the plateau. Two things make this a
+# real improvement rather than a fitted one: every metric moves the same way at
+# once - precision and silence included, so nothing was traded for recall - and
+# 8 is identical to 5, which is the shape of a plateau rather than a spike.
+#
+# Repeating the token is crude but necessary: BM25Okapi takes a flat bag, so
+# there is no field to weight. One occurrence was not enough because term
+# frequency saturates at k1 and the extra tokens lengthen the document, which
+# the length normalisation then penalises - the two effects partly cancel, and
+# three was the worst of both.
+KIND_WEIGHT = 5
+
 
 def stem(token: str) -> str:
     """Fold a word to a comparable root.
@@ -94,6 +120,54 @@ def tokenise(text: str) -> list[str]:
         for token in _TOKEN.findall(text.lower())
         if len(token) > 1 and token not in STOPWORDS
     ]
+
+
+SYNONYMS_PATH = Path(__file__).resolve().parent / "config" / "retrieval_synonyms.yaml"
+
+
+@lru_cache(maxsize=1)
+def load_synonyms(path: str | None = None) -> dict[str, tuple[str, ...]]:
+    """Spoken term -> corpus terms, stemmed on both sides.
+
+    Flattened from the two sections of the config, which are separated for the
+    reader rather than for the code: `morphology` is about English and would
+    hold for any book, `vocabulary` is about this dataset's naming and would
+    not.
+
+    Stemming the map at load time is what keeps it consistent with the query it
+    expands - an entry written as "diversifying" has to match the token
+    tokenise() actually produces, not the word as typed.
+    """
+    import yaml
+
+    config = yaml.safe_load(Path(path or SYNONYMS_PATH).read_text()) or {}
+    flattened: dict[str, tuple[str, ...]] = {}
+    for section in ("morphology", "vocabulary"):
+        for spoken, written in (config.get(section) or {}).items():
+            key = stem(str(spoken).lower())
+            expansions = tuple(stem(str(w).lower()) for w in written)
+            # A term appearing in both sections merges rather than overwrites.
+            flattened[key] = tuple(dict.fromkeys(flattened.get(key, ()) + expansions))
+    return flattened
+
+
+def expand(tokens: Sequence[str],
+           synonyms: dict[str, tuple[str, ...]] | None = None) -> list[str]:
+    """A query's tokens, plus the corpus words they stand in for.
+
+    Query side only. The original tokens are kept and the expansions appended,
+    so a question that already used the data's own vocabulary ranks exactly as
+    it did before - expansion can add a way to find a fact, never take one
+    away. Duplicates are kept out so one spoken word cannot outweigh the rest
+    of the sentence simply by expanding into three.
+    """
+    synonyms = load_synonyms() if synonyms is None else synonyms
+    out = list(tokens)
+    for token in tokens:
+        for expansion in synonyms.get(token, ()):
+            if expansion not in out:
+                out.append(expansion)
+    return out
 
 
 _IDENTIFIER = re.compile(r"^[A-Z]{1,5}-[A-Z0-9-]+$")
@@ -144,8 +218,15 @@ class FactIndex:
                 source_rows.get(f"{s['file']}::{s['row_ref']}", {})
                 for s in fact.get("sources", [])
             ]
+            # The kind is the fact's topic, so a question that names it should
+            # prefer that cluster. Repeated rather than scored separately
+            # because BM25Okapi takes a flat bag of tokens, and one occurrence
+            # was not enough: "worried about the collateral position" ranked
+            # three single-position facts above all four collateral ones, on
+            # the strength of the word "position" alone. Measured by make eval.
             document = (
-                f"{fact['headline']} {fact.get('detail', '')} {fact['kind']} "
+                f"{fact['headline']} {fact.get('detail', '')} "
+                f"{(fact['kind'] + ' ') * KIND_WEIGHT}"
                 f"{context_terms(cited)}"
             )
             self._corpus.append(tokenise(document))
@@ -174,6 +255,11 @@ class FactIndex:
         tokens = tokenise(query)
         if not tokens:
             return []
+        # The question is expanded, never the corpus. See engine/config/
+        # retrieval_synonyms.yaml: "coal" has to be able to reach a holding
+        # the data calls "Bara Nusantara Energy Tbk", and no ranking change
+        # reaches a word that is simply absent.
+        tokens = expand(tokens)
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(zip(self.facts, scores), key=lambda pair: -pair[1])
         if not ranked or ranked[0][1] <= min_score:
