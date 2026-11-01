@@ -16,12 +16,23 @@ from mcp_server.server import (
 )
 
 
-def test_list_clients_returns_the_deep_clients_with_their_rank():
+def test_list_clients_returns_the_whole_book_with_each_rank():
+    """The engine covers every client, so the tool must not imply otherwise.
+
+    An agent handed a two-name book would reasonably conclude the other
+    eighteen had never been looked at.
+    """
+    from engine.loader import load
+
     result = list_clients()
     by_id = {c["client_id"]: c for c in result["clients"]}
-    assert set(by_id) == {"CL-0001", "CL-0002"}
+    assert set(by_id) == set(load().clients["client_id"])
     assert by_id["CL-0002"]["triage_rank"] == 1
-    assert by_id["CL-0002"]["fact_count"] > 0
+    assert all(c["fact_count"] > 0 for c in result["clients"])
+    # Ranks are a permutation of the book, not an arbitrary label.
+    assert sorted(c["triage_rank"] for c in result["clients"]) == list(
+        range(1, len(by_id) + 1)
+    )
 
 
 def test_client_brief_carries_stated_intent_and_findings():
@@ -60,8 +71,10 @@ def test_get_fact_carries_the_raw_rows_behind_it():
 
 
 def test_every_fact_reachable_through_the_tools_carries_a_source():
-    for client_id in ("CL-0001", "CL-0002"):
-        for finding in get_client_brief(client_id)["findings"]:
+    """Across the whole book, not a sampled pair - an unsourced fact anywhere
+    is reachable by an agent working on that client."""
+    for client in list_clients()["clients"]:
+        for finding in get_client_brief(client["client_id"])["findings"]:
             assert get_fact(finding["fact_id"])["sources"]
 
 

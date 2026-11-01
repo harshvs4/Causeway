@@ -61,7 +61,14 @@ export default function App() {
           <button aria-current={view === "book"} onClick={() => setView("book")}>
             Book
           </button>
-          {data.clients.map((id) => {
+          {/* The rail lists the clients carrying a rehearsal persona, plus
+              whoever is currently open. Twenty first names stacked here was a
+              wall of text that buried Book, Scenario and Live assist — and Book
+              is already the way into the whole ranked book. */}
+          {[
+            ...data.deep_clients,
+            ...(data.deep_clients.includes(clientId) ? [] : [clientId]),
+          ].map((id) => {
             const row = data.triage.ranking.find((r) => r.client_id === id);
             return (
               <button

@@ -38,6 +38,7 @@ _SUFFIXES = {
 }
 _PUNCT = re.compile(r"[^a-z0-9\s]")
 _WS = re.compile(r"\s+")
+_NON_SLUG = re.compile(r"[^A-Z0-9]")
 
 _GRAMMARS = (
     "worst-of basket:",
@@ -51,6 +52,18 @@ def normalise_name(name: str) -> str:
     text = _PUNCT.sub(" ", str(name).lower())
     tokens = [t for t in _WS.sub(" ", text).strip().split(" ") if t and t not in _SUFFIXES]
     return " ".join(tokens)
+
+
+def name_slug(name: str) -> str:
+    """A fact_id-safe token identifying one name.
+
+    A fact_id becomes a vault filename and sits inside wikilinks, so this keeps
+    to characters that survive both: no separators, no spaces. It discriminates
+    facts about different names within the same portfolio, which a portfolio id
+    alone cannot - a worst-of basket puts three names into one account and every
+    one of them can clear the reporting threshold.
+    """
+    return _NON_SLUG.sub("", normalise_name(name).upper()) or "UNNAMED"
 
 
 def parse_underlying(reference: str | float | None) -> list[str]:
@@ -266,7 +279,10 @@ def run(dataset: Dataset, client_ids: tuple[str, ...] = ("CL-0002",)) -> list[Fa
 
                 facts.append(
                     Fact(
-                        fact_id=f"F-{client_id.replace('-', '')}-LOOKTHRU-{portfolio_id}",
+                        fact_id=(
+                            f"F-{client_id.replace('-', '')}-LOOKTHRU-{portfolio_id}-"
+                            f"{name_slug(exposure.display_name)}"
+                        ),
                         client_id=client_id,
                         kind="lookthrough",
                         headline=(
