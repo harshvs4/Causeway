@@ -143,7 +143,7 @@ make setup       # uv venv (Python 3.12) + dependencies
 make build       # analyzers → build/facts.json   (snapshot, reproducible)
 make refresh     # today's market → re-marked book → rebuild
 make refresh-dry # fetch and report quotes, change nothing
-make test        # 282 tests
+make test        # 283 tests
 make eval        # Assist retrieval, measured against 38 labelled lines
 
 make vault       # → vault/ ; open the folder as an Obsidian vault
@@ -189,7 +189,7 @@ this project avoids everywhere else.
 | Clients | **all 20 analysed** by every analyzer; 2 carry a rehearsal persona and hand-recomputed goldens |
 | Vault | 741 notes — 203 Verified, 39 Scenario, 478 Sources, 20 Clients |
 | Rehearse | 1 hand-written persona · **20 generated**, every position cited to a note_id |
-| Tests | **282 passing** |
+| Tests | **283 passing** |
 
 Breadth is not the opposite of depth here. The analyzers are deterministic
 pandas, so running them across the whole book costs a `groupby` and hides
@@ -228,12 +228,17 @@ cannot quietly rot:
 
 | | | |
 |---|---|---|
-| answered | **0.848** | 28 of 33 questions got a correct card |
-| precision | **0.500** | of the cards shown, the share that belonged |
-| recall | **0.660** | of the available correct cards, the share surfaced |
+| answered | **0.909** | 30 of 33 questions got a correct card |
+| precision | **0.507** | of the cards shown, the share that belonged |
+| recall | **0.700** | of the available correct cards, the share surfaced |
 | silence kept | **1.000** | all 5 small-talk lines correctly ignored |
 | mute rate | **0.000** | every question put something on screen |
-| latency | **0.15 ms** p95 | which is why retrieval is BM25 and not an embedding service |
+| latency | **0.16 ms** p95 | which is why retrieval is BM25 and not an embedding service |
+
+Two conversations are scored as well as the 38 lines, because a card raised on
+turn one is still on screen on turn two and the ninety-second cooldown
+deliberately declines to repeat it. That distinction matters: one case reads as
+a miss in isolation and is already answered in sequence.
 
 Precision of 0.5 is the honest headline. Assist shows up to three cards and most
 questions have one right answer, so the right card plus two plausible
@@ -263,12 +268,23 @@ fact but never remove one. Answered went 0.818 → 0.848 and the mute rate to
 zero; a test refuses any entry pointing at a word that appears in no fact, which
 is how a dead `concentration → concentration` mapping was caught.
 
-The five cases still failing are listed by `make eval`, and each is a real limit
-rather than a tuning accident: "he told me that account was for everything
-except the mine" shares no significant token with the wrapper finding it should
-surface; "position" is ambiguous between a holding and a mandate single-position
-limit; and "what did the coal position **do**" carries no term distinguishing a
-question about movement from one about size.
+**Then it found two more, and the fixes are the same shape.** English strong
+verbs change their vowel instead of taking a suffix, so no stemming rule ever
+reaches them: a fact saying what "can be **sold**" was invisible to a question
+asking what he can **sell**. And a question naming a fact's own kind was losing
+to one that merely shared a common noun — "worried about the **collateral**
+position" ranked three single-position facts above all four collateral ones, on
+the strength of "position". A fact's kind now carries weight in its indexed
+text; the sweep that chose the value is in the source, because tuning against an
+eval is how evals get gamed, and it is recorded that every metric moved the same
+way at once and that the value sits on a plateau rather than a spike.
+
+**One case is left failing on purpose.** "What did the coal position **do** this
+year" wants the attribution facts and carries no term separating a question
+about movement from one about size. "Do" and "did" are stopwords and belong
+there; "move" was tested as a non-stopword and made every metric worse, silence
+worst of all. It needs something other than lexical matching, and fitting the
+ranker to one labelled line would be the opposite of what this harness is for.
 
 *Fact construction is airtight* — a fact cannot exist carrying a number it did
 not compute. *Transcript checking is advisory* — it catches obvious fabrications

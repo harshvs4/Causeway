@@ -39,8 +39,30 @@ morphology:
   borrow: [drawn, facility, lombard]
   borrowing: [drawn, facility, lombard]
   borrowed: [drawn, facility, lombard]
-  sellable: [sell, liquid, tradeable]
-  liquidate: [sell, liquid]
+  sellable: [sell, sold, liquid, tradeable]
+  liquidate: [sell, sold, liquid]
+
+  # Strong verbs. English forms these by changing the vowel rather than by
+  # adding a suffix, so no stemming rule reaches them and never will: a fact
+  # saying "can be sold" is invisible to a question asking what he can sell.
+  # Found by the eval - the pledged-liquidity fact was ranking fifth on exactly
+  # that question while saying precisely the thing being asked for.
+  sell: [sold]
+  sells: [sold]
+  sold: [sell]
+  draw: [drew, drawn]
+  draws: [drew, drawn]
+  drew: [drawn, draw]
+  drawdown: [drawn, draw]
+  # "risen" and "fallen" are not targets: the facts say "rose" and "fell" and
+  # never the participle, so entries pointing at them matched nothing. The
+  # config test refuses a dead target, which is how these were caught.
+  rise: [rose]
+  rises: [rose]
+  rose: [rise]
+  fall: [fell]
+  falls: [fell]
+  fell: [fall]
   pledged: [collateral, secured]
   # "breaching" is not here: it already stems to "breach", so an entry would
   # expand a word to itself. The config test refuses that, which is how this
