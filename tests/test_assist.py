@@ -13,6 +13,7 @@ from assist.app import (
     build_cue,
     ingest,
     load_facts,
+    named_client,
 )
 
 
@@ -283,3 +284,66 @@ def test_context_still_rescues_a_fragment(fresh):
     """A fragment on its own finds nothing, so the window is the fallback."""
     say("I want to talk about the facility")
     assert say("the trigger") != []
+
+
+# --- naming a client moves the conversation to them ------------------------
+
+def clients_of(cues):
+    return {c["client_id"] for c in cues}
+
+
+def test_naming_another_client_answers_for_that_client(fresh):
+    """Asking about Ravi while Hartono is open is a question about Ravi."""
+    cues = say("what is Ravi's collateral looking like", client_id="CL-0001")
+    assert cues and clients_of(cues) == {"CL-0002"}
+    assert _sessions["CL-0001"].focus == "CL-0002"
+
+
+def test_a_follow_up_stays_with_the_client_just_named(fresh):
+    say("what is Ravi's collateral looking like", client_id="CL-0001")
+    cues = say("and did he breach the facility", client_id="CL-0001")
+    assert cues and clients_of(cues) == {"CL-0002"}
+
+
+def test_naming_the_open_client_changes_nothing(fresh):
+    say("Ravi is worried about the collateral")
+    assert _sessions["CL-0002"].focus is None
+
+
+def test_a_cue_says_which_client_it_is_about(fresh):
+    cue = say("he's worried about the collateral")[0]
+    assert cue["client_id"] == "CL-0002"
+    assert cue["client_name"] == "Ravi Chandrasekaran"
+
+
+@pytest.mark.parametrize("phrase, client_id", [
+    ("Hartono Wijaya Kusuma", "CL-0001"),
+    ("what about Chandrasekaran", "CL-0002"),
+    ("has Mr Tan called back", "CL-0011"),
+    ("Mrs Lau wants an update", "CL-0014"),
+    ("the Fong family office", "CL-0017"),
+])
+def test_a_client_is_recognised_by_name(phrase, client_id):
+    load_facts()
+    assert named_client(phrase) == client_id
+
+
+@pytest.mark.parametrize("phrase", [
+    "is there a grace period on the facility",   # Grace Adeyemi-Lim
+    "that would be a boon for him",              # Tan Boon Huat
+    "the family office structure",               # Fong Enterprises Family Office
+    "we can tan the numbers later",              # a short name with no title
+    "compare Ravi with Hartono",                 # two clients: do not pick one
+])
+def test_ordinary_words_and_two_names_do_not_switch(phrase):
+    load_facts()
+    assert named_client(phrase) is None
+
+
+def test_the_name_chooses_the_client_not_the_fact(fresh):
+    """Saying "Ravi" must not pull up facts just because their notes quote him."""
+    with_name = [c["fact_id"] for c in say("what is Ravi's collateral looking like")]
+    _sessions.clear()
+    without = [c["fact_id"] for c in say("what is his collateral looking like")]
+    assert with_name == without
+    assert any("COLLAT" in fact_id for fact_id in with_name)
