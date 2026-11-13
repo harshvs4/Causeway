@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { TriageRow } from "./types";
 
 /**
  * Live Assist. Transcript in, grounded cue cards out.
@@ -49,7 +50,14 @@ function speechRecognition(): any | null {
   return Ctor ? new Ctor() : null;
 }
 
-export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) {
+export default function Assist({
+  clientId = "CL-0002",
+  clients = [],
+}: {
+  clientId?: string;
+  // In call-list order, so the clients most likely to come up are at the top.
+  clients?: TriageRow[];
+}) {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
@@ -121,6 +129,17 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
     [clientId]
   );
 
+  // Picking a client moves the same focus that naming one does, so the picker,
+  // the label and the cards can never disagree about whose call this is.
+  const pick = useCallback((id: string) => {
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "focus", client_id: id }));
+    } else {
+      setError("Assist service unreachable — run `make assist`.");
+    }
+  }, []);
+
   const toggleMic = useCallback(() => {
     if (listening) {
       recogRef.current?.stop();
@@ -161,6 +180,23 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
           there is no audio output in this service at all, which is what makes the rule
           that the client only ever hears their RM structural rather than promised.
         </p>
+      </div>
+
+      <div className="picker">
+        <label htmlFor="assist-client">Client</label>
+        <select
+          id="assist-client"
+          value={focus.id}
+          onChange={(event) => pick(event.target.value)}
+          disabled={!connected}
+        >
+          {clients.map((row) => (
+            <option key={row.client_id} value={row.client_id}>
+              {row.rank}. {row.client_name} · {row.client_id}
+            </option>
+          ))}
+        </select>
+        <span className="hint">or name them as you talk</span>
       </div>
 
       <div className="mic">

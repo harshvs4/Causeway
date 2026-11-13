@@ -14,6 +14,8 @@ from assist.app import (
     ingest,
     load_facts,
     named_client,
+    session_for,
+    set_focus,
 )
 
 
@@ -347,3 +349,32 @@ def test_the_name_chooses_the_client_not_the_fact(fresh):
     without = [c["fact_id"] for c in say("what is his collateral looking like")]
     assert with_name == without
     assert any("COLLAT" in fact_id for fact_id in with_name)
+
+
+# --- the console's client picker --------------------------------------------
+
+def pick(client_id, session_client="CL-0001"):
+    return asyncio.run(set_focus(session_for(session_client), client_id))
+
+
+def test_picking_a_client_answers_for_that_client(fresh):
+    assert pick("CL-0002")
+    cues = say("did he breach the facility", client_id="CL-0001")
+    assert cues and clients_of(cues) == {"CL-0002"}
+
+
+def test_picking_back_the_open_client_returns_to_them(fresh):
+    say("what is Ravi's collateral looking like", client_id="CL-0001")
+    assert pick("CL-0001")
+    assert _sessions["CL-0001"].focus == "CL-0001"
+
+
+def test_picking_an_unknown_client_changes_nothing(fresh):
+    assert not pick("CL-9999")
+    assert _sessions["CL-0001"].focus is None
+
+
+def test_picking_a_client_drops_the_previous_clients_context(fresh):
+    say("I want to talk about the facility", client_id="CL-0001")
+    pick("CL-0002")
+    assert not _sessions["CL-0001"].window
