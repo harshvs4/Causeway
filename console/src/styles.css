@@ -80,13 +80,15 @@ button:disabled { color: var(--ink-4); cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
 
-input {
+input, select {
   font: inherit; font-size: var(--t-body);
   padding: var(--s2) var(--s3);
   border: 1px solid var(--rule); border-radius: var(--radius);
   background: var(--raised); color: var(--ink); width: 100%;
 }
-input:focus { outline: none; border-color: var(--accent); }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+select { cursor: pointer; }
+select:disabled { color: var(--ink-4); cursor: default; }
 
 /* ---------- shell ---------- */
 .shell { display: grid; grid-template-columns: 216px 1fr; min-height: 100vh; }
@@ -235,6 +237,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .heard li:first-child { color: var(--ink); }
 .heard .src { font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); display: block; }
 
+.picker { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); max-width: 620px; }
+.picker label { font-weight: 600; }
+.picker select { flex: 1; min-width: 0; }
+.picker .hint { white-space: nowrap; }
 .mic { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); }
 .dot.live { background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }

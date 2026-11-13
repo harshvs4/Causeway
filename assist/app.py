@@ -202,6 +202,22 @@ def focus_message(client_id: str) -> dict[str, Any]:
             "client_name": _client_names.get(client_id, client_id)}
 
 
+async def set_focus(session: Session, client_id: str) -> bool:
+    """Move the conversation to another client, whether named or picked.
+
+    The previous client's context is dropped so it cannot answer for the new
+    one. An unknown client is refused rather than half-applied.
+    """
+    if client_id not in _client_names:
+        return False
+    if client_id == (session.focus or session.client_id):
+        return True
+    session.focus = client_id
+    session.window.clear()
+    await broadcast(session, focus_message(client_id))
+    return True
+
+
 def session_for(client_id: str) -> Session:
     if client_id not in _sessions or _sessions[client_id].client_id != client_id:
         _sessions[client_id] = Session(client_id=client_id)
@@ -257,12 +273,9 @@ async def ingest(chunk: TranscriptChunk) -> list[dict[str, Any]]:
     # Asking about Ravi while Hartono is open is a question about Ravi. The
     # client stays in focus for follow-ups that do not name anyone, and the
     # previous client's context is dropped so it cannot answer for the new one.
-    current = session.focus or chunk.client_id
     named = named_client(text)
-    if named is not None and named != current:
-        session.focus = named
-        session.window.clear()
-        await broadcast(session, focus_message(named))
+    if named is not None:
+        await set_focus(session, named)
     client_id = session.focus or chunk.client_id
     query = without_names(text)
     session.window.append(query)
@@ -476,6 +489,10 @@ async def assist(websocket: WebSocket, client_id: str = "CL-0002") -> None:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
                 payload = {"text": raw}
+            # The console's client picker. Same move as naming the client.
+            if payload.get("type") == "focus":
+                await set_focus(session, str(payload.get("client_id", "")))
+                continue
             if payload.get("text"):
                 await ingest(
                     TranscriptChunk(

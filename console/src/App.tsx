@@ -116,7 +116,7 @@ export default function App() {
         {view === "scenario" && (
           <Scenario envelope={data} clientId={clientId} onOpenFact={setSelected} />
         )}
-        {view === "assist" && <Assist clientId={clientId} />}
+        {view === "assist" && <Assist clientId={clientId} clients={data.triage.ranking} />}
       </main>
 
       {selected && (
