@@ -21,6 +21,8 @@ const ASSIST_WS = `${location.protocol === "https:" ? "wss" : "ws"}://${location
 
 type Cue = {
   fact_id: string;
+  client_id: string;
+  client_name: string;
   kind: string;
   severity: number;
   confidence: string;
@@ -54,6 +56,12 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
   const [cues, setCues] = useState<Cue[]>([]);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Who the conversation is about. The service moves it when the RM names a
+  // different client, so the label follows the cards rather than the rail.
+  const [focus, setFocus] = useState<{ id: string; name: string }>({
+    id: clientId,
+    name: clientId,
+  });
   const socketRef = useRef<WebSocket | null>(null);
   const recogRef = useRef<any>(null);
 
@@ -63,6 +71,7 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
     // so without this guard the console reports the service as unreachable
     // while the second socket is connected and working perfectly.
     let cancelled = false;
+    setFocus({ id: clientId, name: clientId });
     const socket = new WebSocket(`${ASSIST_WS}?client_id=${clientId}`);
     socketRef.current = socket;
     socket.onopen = () => {
@@ -79,7 +88,11 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
     socket.onmessage = (event) => {
       if (cancelled) return;
       const message = JSON.parse(event.data);
-      if (message.type === "transcript") {
+      if (message.type === "ready") {
+        setFocus({ id: message.focus ?? message.client_id, name: message.client_name });
+      } else if (message.type === "focus") {
+        setFocus({ id: message.client_id, name: message.client_name });
+      } else if (message.type === "transcript") {
         setLines((prev) => [...prev.slice(-40), message as Line]);
       } else if (message.type === "cue") {
         // Newest first: the RM reads the top of the stack mid-sentence.
@@ -138,7 +151,10 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
   return (
     <>
       <div className="page-head">
-        <div className="eyebrow">Live assist · {clientId}</div>
+        <div className="eyebrow">
+          Live assist · {focus.name}
+          {focus.name !== focus.id && ` · ${focus.id}`}
+        </div>
         <h1>Listening</h1>
         <p className="lede">
           Grounded facts, surfaced as the conversation reaches them. Nothing here speaks —
@@ -192,6 +208,8 @@ export default function Assist({ clientId = "CL-0002" }: { clientId?: string }) 
                 <span className={`chip ${cue.confidence === "verified" ? "chip-verified" : "chip-derived"}`}>
                   {cue.confidence}
                 </span>
+                <span>{cue.client_name}</span>
+                <span>·</span>
                 <span>{cue.fact_id}</span>
                 <span>·</span>
                 <span>relevance {cue.relevance}</span>

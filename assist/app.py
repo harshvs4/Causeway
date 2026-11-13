@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -68,6 +69,18 @@ NON_CONVERSATIONAL_KINDS = frozenset({"triage", "scenario"})
 # it is a reading task in the middle of a conversation.
 MAX_CUES = 3
 
+# Naming a client moves the conversation to them. A name word on its own counts
+# only when it could not be anything else: "grace period" must not open Grace
+# Adeyemi-Lim, and "a boon" must not open Tan Boon Huat. Short or ordinary name
+# words still count after a title ("Mr Tan", "Mrs Lau"), and a full name always
+# counts.
+MIN_NAME_WORD = 4
+ORDINARY_NAME_WORDS = frozenset(
+    {"grace", "boon", "family", "office", "enterprises", "wing", "hale", "binti"}
+)
+TITLES = frozenset({"mr", "mrs", "ms", "miss", "madam", "dr"})
+_WORD = re.compile(r"[a-z]+")
+
 
 class TranscriptChunk(BaseModel):
     client_id: str
@@ -80,6 +93,9 @@ class TranscriptChunk(BaseModel):
 @dataclass
 class Session:
     client_id: str
+    # The client the conversation is about right now. Starts as the client the
+    # console opened, and moves when the RM names someone else.
+    focus: str | None = None
     window: deque[str] = field(default_factory=lambda: deque(maxlen=WINDOW_UTTERANCES))
     last_surfaced: dict[str, float] = field(default_factory=dict)
     sockets: set[WebSocket] = field(default_factory=set)
@@ -114,10 +130,11 @@ _sessions: dict[str, Session] = defaultdict(lambda: Session(client_id="?"))
 _envelope: dict[str, Any] = {}
 _indexes: dict[str, FactIndex] = {}
 _facts_by_id: dict[str, dict] = {}
+_client_names: dict[str, str] = {}
 
 
 def load_facts() -> None:
-    global _envelope, _indexes, _facts_by_id
+    global _envelope, _indexes, _facts_by_id, _client_names
     path = BUILD_DIR / "facts.json"
     if not path.exists():
         raise FileNotFoundError(f"{path} missing — run `make build` first")
@@ -130,6 +147,59 @@ def load_facts() -> None:
     rows = _envelope.get("source_rows", {})
     _indexes = {cid: FactIndex(items, rows) for cid, items in grouped.items()}
     _facts_by_id = {f["fact_id"]: f for f in _envelope["facts"]}
+    _client_names = {
+        row["client_id"]: row["client_name"]
+        for row in _envelope.get("triage", {}).get("ranking", [])
+    }
+
+
+def _names_in(text: str) -> tuple[set[str], set[str]]:
+    """Clients this sentence names, and the words that named them."""
+    words = _WORD.findall(text.lower())
+    padded = f" {' '.join(words)} "
+    found: set[str] = set()
+    naming: set[str] = set()
+    for client_id, name in _client_names.items():
+        parts = _WORD.findall(name.lower())
+        if f" {' '.join(parts)} " in padded:
+            found.add(client_id)
+            naming.update(parts)
+            continue
+        for i, word in enumerate(words):
+            if word not in parts:
+                continue
+            distinctive = len(word) >= MIN_NAME_WORD and word not in ORDINARY_NAME_WORDS
+            after_title = i > 0 and words[i - 1] in TITLES
+            if distinctive or after_title:
+                found.add(client_id)
+                naming.add(word)
+                if after_title:
+                    naming.add(words[i - 1])
+    return found, naming
+
+
+def named_client(text: str) -> str | None:
+    """The one client this sentence names, or None if it names none or several."""
+    found, _ = _names_in(text)
+    return found.pop() if len(found) == 1 else None
+
+
+def without_names(text: str) -> str:
+    """The question with the client's name taken out.
+
+    The name has already chosen whose facts to search. Left in, it also chooses
+    which fact: notes quote the client by name, so "what is Ravi's collateral
+    looking like" led with tension facts quoting Ravi instead of the facility.
+    """
+    _, naming = _names_in(text)
+    for word in naming:
+        text = re.sub(rf"\b{word}\b", " ", text, flags=re.IGNORECASE)
+    return text
+
+
+def focus_message(client_id: str) -> dict[str, Any]:
+    return {"type": "focus", "client_id": client_id,
+            "client_name": _client_names.get(client_id, client_id)}
 
 
 def session_for(client_id: str) -> Session:
@@ -143,6 +213,8 @@ def build_cue(fact: dict, relevance: float, heard: str) -> dict[str, Any]:
     rows = _envelope.get("source_rows", {})
     return {
         "fact_id": fact["fact_id"],
+        "client_id": fact["client_id"],
+        "client_name": _client_names.get(fact["client_id"], fact["client_id"]),
         "kind": fact["kind"],
         "severity": fact["severity"],
         "confidence": fact["confidence"],
@@ -181,9 +253,21 @@ async def ingest(chunk: TranscriptChunk) -> list[dict[str, Any]]:
     text = chunk.text.strip()
     if not text:
         return []
-    session.window.append(text)
 
-    index = _indexes.get(chunk.client_id)
+    # Asking about Ravi while Hartono is open is a question about Ravi. The
+    # client stays in focus for follow-ups that do not name anyone, and the
+    # previous client's context is dropped so it cannot answer for the new one.
+    current = session.focus or chunk.client_id
+    named = named_client(text)
+    if named is not None and named != current:
+        session.focus = named
+        session.window.clear()
+        await broadcast(session, focus_message(named))
+    client_id = session.focus or chunk.client_id
+    query = without_names(text)
+    session.window.append(query)
+
+    index = _indexes.get(client_id)
     if index is None:
         return []
 
@@ -198,7 +282,7 @@ async def ingest(chunk: TranscriptChunk) -> list[dict[str, Any]]:
     # widen to recent context - a live prompter should answer the sentence in
     # front of it, not the average of the last minute.
     candidates = index.search(
-        text,
+        query,
         limit=MAX_CUES * 4,
         min_score=MIN_RELEVANCE,
         relative_cutoff=RELATIVE_CUTOFF,
@@ -374,9 +458,13 @@ async def assist(websocket: WebSocket, client_id: str = "CL-0002") -> None:
         # suppress the first cues of the real conversation.
         session.window.clear()
         session.last_surfaced.clear()
+        session.focus = None
     session.sockets.add(websocket)
+    focus = session.focus or client_id
     await websocket.send_json(
         {"type": "ready", "client_id": client_id,
+         "client_name": _client_names.get(focus, focus),
+         "focus": focus,
          "facts": len(_indexes.get(client_id).facts) if client_id in _indexes else 0}
     )
     try:
